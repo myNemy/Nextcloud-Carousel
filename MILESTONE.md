@@ -333,9 +333,178 @@ To implement actual image transitions, the following is required:
 2. ✅ Add FillMode and ImageScale to configuration interface (COMPLETE)
 3. ✅ Add TransitionDuration to configuration interface (COMPLETE)
 4. ✅ Add TransitionType to configuration interface (UI COMPLETE - Backend pending)
-5. Improve validation and user feedback
-6. Add settings preview
-7. Optimize performance for large photo collections
+5. **🔴 PRIORITY: Implement transition system in backend** (see detailed explanation below)
+6. Improve validation and user feedback
+7. Add settings preview
+8. Optimize performance for large photo collections
+
+## 🎯 What Needs to Be Done Now
+
+### Current Situation
+
+**✅ COMPLETED:**
+- All UI settings are now configurable from the interface
+- All settings are saved correctly in configuration
+- Plugin works and displays images correctly
+
+**❌ MISSING:**
+- **Visual transitions between images** - Images change instantly without animation
+- The `TransitionType` and `TransitionDuration` settings are saved but **NOT USED** in the backend
+
+### The Problem
+
+Currently, when an image changes:
+1. Timer triggers → `nextPhoto()` is called
+2. New image is downloaded via `loadImageWithAuth()`
+3. Image is converted to base64 data URL
+4. **`imageView.source = dataUrl`** ← **INSTANT CHANGE, NO ANIMATION**
+5. Image appears immediately
+
+**What's in the code but NOT USED:**
+- `StackView` (lines 374-397 in `main.qml`) is defined with transitions but **NEVER USED**
+- The `Image` component (lines 400-443) loads images directly, bypassing StackView
+- `TransitionType` setting exists but is **NEVER READ** in the code
+
+### Solution: Implement Transition System
+
+To make transitions work, we need to **replace the direct image loading** with a **transition system**. There are two main approaches:
+
+#### **Option 1: Dual Image Layers (Recommended - Simpler)**
+
+**How it works:**
+- Two `Image` components: `currentImage` and `nextImage`
+- When changing image:
+  1. Load new image into `nextImage` (hidden, opacity=0)
+  2. Start transition animation based on `TransitionType`:
+     - **Fade:** `nextImage.opacity 0→1`, `currentImage.opacity 1→0`
+     - **Slide:** `nextImage.x` animation (slide in), `currentImage.x` animation (slide out)
+     - **Zoom:** `nextImage.scale` animation (zoom in), `currentImage.scale` animation (zoom out)
+  3. After animation completes, swap: `currentImage = nextImage`, clear `nextImage`
+  4. Repeat for next change
+
+**Implementation steps:**
+1. Replace single `Image` component with two `Image` components
+2. Modify `loadImageWithAuth()` to load into `nextImage` instead of `imageView`
+3. Add transition logic based on `root.configuration.TransitionType`:
+   - Read `TransitionType` (0=Fade, 1=Slide, 2=Zoom)
+   - Apply appropriate animations using `NumberAnimation` or `ParallelAnimation`
+   - Use `TransitionDuration` for animation duration
+4. Add completion handler to swap images after animation
+5. Handle edge cases (first image, errors, etc.)
+
+**Complexity:** Medium
+**Estimated effort:** 2-3 hours
+**Files to modify:** `nextcloud-carousel/contents/ui/main.qml`
+
+#### **Option 2: StackView System (More Complex)**
+
+**How it works:**
+- Use the existing `StackView` (already defined but unused)
+- Create a component for each image
+- Push new image component onto stack with transition
+- Pop old image component with exit transition
+
+**Implementation steps:**
+1. Create `ImageComponent.qml` for individual images
+2. Modify `loadImageWithAuth()` to create and push new component
+3. Configure StackView transitions based on `TransitionType`
+4. Handle stack management (limit depth, cleanup)
+
+**Complexity:** High
+**Estimated effort:** 4-5 hours
+**Files to modify:** `nextcloud-carousel/contents/ui/main.qml`, create `ImageComponent.qml`
+
+### Recommended Approach
+
+**Choose Option 1 (Dual Image Layers)** because:
+- ✅ Simpler to implement
+- ✅ Better performance (only 2 images in memory)
+- ✅ Easier to debug
+- ✅ More control over animations
+- ✅ StackView is overkill for this use case
+
+### Detailed Implementation Plan (Option 1)
+
+**Step 1: Replace single Image with dual Images**
+```qml
+// Replace this:
+Image {
+    id: imageView
+    // ...
+}
+
+// With this:
+Image {
+    id: currentImage
+    // ... (visible, showing current image)
+}
+
+Image {
+    id: nextImage
+    // ... (hidden, opacity=0, for loading next image)
+}
+```
+
+**Step 2: Modify loadImageWithAuth()**
+- Instead of `imageView.source = dataUrl`
+- Use `nextImage.source = dataUrl`
+- After image loads (`onStatusChanged: Image.Ready`), trigger transition
+
+**Step 3: Add transition function**
+```qml
+function startTransition() {
+    var transitionType = root.configuration.TransitionType || 0
+    var duration = root.configuration.TransitionDuration || 1000
+    
+    if (transitionType === 0) {
+        // Fade transition
+        // Animate nextImage.opacity 0→1, currentImage.opacity 1→0
+    } else if (transitionType === 1) {
+        // Slide transition
+        // Animate nextImage.x (slide in), currentImage.x (slide out)
+    } else if (transitionType === 2) {
+        // Zoom transition
+        // Animate nextImage.scale (zoom in), currentImage.scale (zoom out)
+    }
+    
+    // After animation completes, swap images
+}
+```
+
+**Step 4: Update Connections**
+- Add handler for `onTransitionTypeChanged()` to apply new transition type
+- Add handler for `onTransitionDurationChanged()` to update animation duration
+
+**Step 5: Testing**
+- Test each transition type (Fade, Slide, Zoom)
+- Test with different durations
+- Test edge cases (first image, errors, rapid changes)
+
+### Alternative: Simpler Improvements (If transitions are too complex)
+
+If implementing transitions is too complex right now, we can focus on:
+
+1. **Improve validation and user feedback**
+   - Add input validation for all fields
+   - Show error messages for invalid configurations
+   - Add connection status indicator
+
+2. **Optimize performance**
+   - Preload next image in background
+   - Cache images locally
+   - Optimize WebDAV requests
+
+3. **Add settings preview**
+   - Live preview of settings changes
+   - Preview transition types before applying
+
+### Decision Needed
+
+**Which approach do you prefer?**
+- **A)** Implement transition system (Option 1: Dual Image Layers) - **RECOMMENDED**
+- **B)** Implement transition system (Option 2: StackView)
+- **C)** Focus on simpler improvements first (validation, performance, preview)
+- **D)** Something else?
 
 ## 🔮 Planned Features
 
