@@ -355,60 +355,12 @@ WallpaperItem {
         property Item pendingImage: null
         property bool doesSkipAnimation: true
         
-        // Inline component definition (more reliable than external file)
-        property Component imageComponent: Component {
-            Item {
-                id: imageItem
-                
-                required property url source
-                required property int fillMode
-                required property color color
-                required property bool blur
-                required property real blurOpacity
-                required property real imageScale
-                required property size sourceSize
-                
-                // Background color
-                Rectangle {
-                    anchors.fill: parent
-                    color: imageItem.color
-                    z: -1
-                }
-                
-                // Main image
-                Image {
-                    id: mainImage
-                    anchors.fill: parent
-                    source: imageItem.source
-                    fillMode: {
-                        switch (imageItem.fillMode) {
-                        case 0: return Image.Stretch
-                        case 1: return Image.PreserveAspectFit
-                        case 2: return Image.PreserveAspectCrop
-                        case 3: return Image.Tile
-                        case 4: return Image.TileVertically
-                        case 5: return Image.TileHorizontally
-                        default: return Image.PreserveAspectCrop
-                        }
-                    }
-                    scale: imageItem.imageScale / 100.0
-                    transformOrigin: Item.Center
-                    asynchronous: true
-                    cache: true
-                    smooth: true
-                    autoTransform: true
-                    opacity: imageItem.blur ? (imageItem.blurOpacity / 100.0) : 1.0
-                    sourceSize: fillMode === Image.Pad ? undefined : imageItem.sourceSize
-                }
-                
-                readonly property alias status: mainImage.status
-            }
-        }
-        
         function loadImageComponent(dataUrl) {
             // Clean up previous pending image if exists
             if (pendingImage) {
-                pendingImage.statusChanged.disconnect(replaceWhenLoaded)
+                if (pendingImage.statusChanged) {
+                    pendingImage.statusChanged.disconnect(replaceWhenLoaded)
+                }
                 pendingImage.destroy()
                 pendingImage = null
             }
@@ -418,26 +370,56 @@ WallpaperItem {
             
             console.log("Creating pending image with dataUrl length:", dataUrl.length)
             
-            // Create image using inline component
-            pendingImage = imageComponent.createObject(imageStack, {
-                "source": dataUrl,
-                "fillMode": root.configuration.FillMode,
-                "color": root.configuration.Color,
-                "blur": root.configuration.Blur,
-                "blurOpacity": root.configuration.BlurOpacity,
-                "imageScale": root.configuration.ImageScale,
-                "sourceSize": Qt.size(root.width * Screen.devicePixelRatio, root.height * Screen.devicePixelRatio)
-            })
+            // Create image directly (simplest approach)
+            var imageItem = Qt.createQmlObject('
+                import QtQuick
+                Item {
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "' + root.configuration.Color + '"
+                        z: -1
+                    }
+                    Image {
+                        id: mainImage
+                        anchors.fill: parent
+                        source: "' + dataUrl + '"
+                        fillMode: {
+                            var mode = ' + root.configuration.FillMode + '
+                            if (mode === 0) return Image.Stretch
+                            if (mode === 1) return Image.PreserveAspectFit
+                            if (mode === 2) return Image.PreserveAspectCrop
+                            if (mode === 3) return Image.Tile
+                            if (mode === 4) return Image.TileVertically
+                            if (mode === 5) return Image.TileHorizontally
+                            return Image.PreserveAspectCrop
+                        }
+                        scale: ' + (root.configuration.ImageScale / 100.0) + '
+                        transformOrigin: Item.Center
+                        asynchronous: true
+                        cache: true
+                        smooth: true
+                        autoTransform: true
+                        opacity: ' + (root.configuration.Blur ? (root.configuration.BlurOpacity / 100.0) : 1.0) + '
+                        sourceSize: Qt.size(' + (root.width * Screen.devicePixelRatio) + ', ' + (root.height * Screen.devicePixelRatio) + ')
+                    }
+                    readonly property alias status: mainImage.status
+                }
+            ', imageStack, "ImageItem")
             
-            if (!pendingImage) {
-                console.error("Failed to create ImageComponent")
+            if (!imageItem) {
+                console.error("Failed to create image item")
                 root.loading = false
                 return
             }
             
+            pendingImage = imageItem
+            
             // Connect to statusChanged to replace when loaded
-            pendingImage.statusChanged.connect(replaceWhenLoaded)
-            replaceWhenLoaded()
+            if (pendingImage.statusChanged) {
+                pendingImage.statusChanged.connect(replaceWhenLoaded)
+            }
+            // Check immediately if already loaded
+            Qt.callLater(replaceWhenLoaded)
         }
         
         function replaceWhenLoaded() {
