@@ -10,8 +10,6 @@ import org.kde.plasma.wallpapers.image as Wallpaper
 import org.kde.plasma.plasmoid
 import org.kde.kirigami as Kirigami
 
-import "."
-
 WallpaperItem {
     id: root
 
@@ -333,7 +331,7 @@ WallpaperItem {
                         console.log("Creating pending image component (data URL length:", dataUrl.length, ")")
                         
                         // Create pending image component using ImageComponent.qml
-                        loadImageComponent(dataUrl)
+                        carouselController.loadImageComponent(dataUrl)
                     } else {
                         console.error("Failed to load image. Status:", xhr.status, xhr.statusText)
                         if (xhr.status === 401) {
@@ -357,6 +355,56 @@ WallpaperItem {
         property Item pendingImage: null
         property bool doesSkipAnimation: true
         
+        // Inline component definition (more reliable than external file)
+        property Component imageComponent: Component {
+            Item {
+                id: imageItem
+                
+                required property url source
+                required property int fillMode
+                required property color color
+                required property bool blur
+                required property real blurOpacity
+                required property real imageScale
+                required property size sourceSize
+                
+                // Background color
+                Rectangle {
+                    anchors.fill: parent
+                    color: imageItem.color
+                    z: -1
+                }
+                
+                // Main image
+                Image {
+                    id: mainImage
+                    anchors.fill: parent
+                    source: imageItem.source
+                    fillMode: {
+                        switch (imageItem.fillMode) {
+                        case 0: return Image.Stretch
+                        case 1: return Image.PreserveAspectFit
+                        case 2: return Image.PreserveAspectCrop
+                        case 3: return Image.Tile
+                        case 4: return Image.TileVertically
+                        case 5: return Image.TileHorizontally
+                        default: return Image.PreserveAspectCrop
+                        }
+                    }
+                    scale: imageItem.imageScale / 100.0
+                    transformOrigin: Item.Center
+                    asynchronous: true
+                    cache: true
+                    smooth: true
+                    autoTransform: true
+                    opacity: imageItem.blur ? (imageItem.blurOpacity / 100.0) : 1.0
+                    sourceSize: fillMode === Image.Pad ? undefined : imageItem.sourceSize
+                }
+                
+                readonly property alias status: mainImage.status
+            }
+        }
+        
         function loadImageComponent(dataUrl) {
             // Clean up previous pending image if exists
             if (pendingImage) {
@@ -368,15 +416,10 @@ WallpaperItem {
             // Check if we should skip animation (first image or size change)
             doesSkipAnimation = imageStack.currentItem === undefined
             
-            // Create ImageComponent
-            var component = Qt.createComponent("ImageComponent.qml")
-            if (component.status === Component.Error) {
-                console.error("Error creating ImageComponent:", component.errorString())
-                root.loading = false
-                return
-            }
+            console.log("Creating pending image with dataUrl length:", dataUrl.length)
             
-            pendingImage = component.createObject(imageStack, {
+            // Create image using inline component
+            pendingImage = imageComponent.createObject(imageStack, {
                 "source": dataUrl,
                 "fillMode": root.configuration.FillMode,
                 "color": root.configuration.Color,
