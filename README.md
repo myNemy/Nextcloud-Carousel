@@ -281,4 +281,4 @@ GPL-2.0-or-later
 
 ---
 
-For detailed development information, see [MILESTONE.md](MILESTONE.md)
+For detailed development information, see [DEVELOPMENT.md](DEVELOPMENT.md)
