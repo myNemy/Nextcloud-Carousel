@@ -857,6 +857,158 @@ If implementing transitions is too complex right now, we can focus on:
   - ⏳ Optimal display based on image aspect ratio (future enhancement)
   - ⏳ Support for portrait and landscape modes detection (future enhancement)
 
+## 🎥 Nextcloud Video Plugin - Structure Prepared
+
+### Overview
+
+A separate video wallpaper plugin has been prepared alongside the image carousel plugin. Both plugins share the same repository but are completely independent, allowing users to choose between image or video wallpapers.
+
+### Project Structure
+
+```
+nextcloud-plasma-addon/
+├── nextcloud-carousel/     # Image carousel plugin (fully implemented)
+│   ├── metadata.json
+│   └── contents/
+│       ├── ui/
+│       ├── config/
+│       └── locale/
+│
+└── nextcloud-video/        # Video plugin (structure prepared)
+    ├── metadata.json
+    └── contents/
+        ├── ui/
+        │   ├── main.qml    # Base structure (TODO: implement)
+        │   └── config.qml  # Configuration UI (TODO: implement)
+        ├── config/
+        │   └── main.xml    # Configuration schema (prepared)
+        └── locale/
+```
+
+### Video Plugin Details
+
+**Plugin ID:** `org.nextcloud.video`  
+**Name:** Nextcloud Video  
+**Icon:** `video-x-generic`
+
+#### Configuration Options (main.xml)
+
+- **NextcloudUrl**: Server URL
+- **Username**: Nextcloud username
+- **Password**: Password or app password
+- **VideoPath**: Path to videos folder (default: `/Videos`)
+- **VideoInterval**: Interval between videos in seconds (default: 30)
+- **RandomOrder**: Order mode (0=Sequential, 1=Random, 2=Shuffle once, 3=Smart random)
+- **LoopVideo**: Loop each video (default: true)
+- **MuteAudio**: Mute video audio (default: true)
+- **Color**: Background color
+- **FillMode**: Video sizing/cropping (0-5, same as images)
+- **VideoScale**: Video scale percentage (50-200, default: 100)
+
+#### Supported Video Formats
+
+- MP4 (`video/mp4`)
+- WebM (`video/webm`)
+- OGG (`video/ogg`)
+- QuickTime (`video/quicktime`)
+- AVI (`video/x-msvideo`)
+
+#### Implementation Status
+
+**✅ Completed:**
+- Plugin directory structure created
+- `metadata.json` with video-specific configuration
+- `config/main.xml` with video settings
+- `config.qml` UI structure (fully implemented)
+- `main.qml` fully implemented with:
+  - ✅ WebDAV video loading (PROPFIND, recursive folder search)
+  - ✅ `MediaPlayer` and `VideoOutput` components
+  - ✅ Video switching logic (sequential, random, shuffle, smart random)
+  - ✅ Video format detection and filtering (mp4, webm, ogg, mov, avi, mkv, m4v)
+  - ✅ Error handling for video loading and playback
+  - ✅ Video loop logic (infinite loop or single play)
+  - ✅ Audio mute control
+  - ✅ FillMode support (Stretch, PreserveAspectFit, PreserveAspectCrop)
+  - ✅ Video scale control
+  - ✅ Background color
+  - ✅ Loading indicator
+  - ✅ Timer-based video switching (when LoopVideo is false)
+  - ✅ Automatic video switching when video ends (when LoopVideo is false)
+- `install.sh` updated to support both plugins
+
+**✅ Fully Implemented and Tested:**
+- ✅ WebDAV video loading (PROPFIND, recursive folder search)
+- ✅ `MediaPlayer` and `VideoOutput` components (correctly configured)
+- ✅ Video switching logic (sequential, random, shuffle, smart random)
+- ✅ Video format detection and filtering (mp4, webm, ogg, mov, avi, mkv, m4v)
+- ✅ Error handling for video loading and playback
+- ✅ Video loop logic (infinite loop or single play)
+- ✅ Audio mute control
+- ✅ FillMode support (Stretch, PreserveAspectFit, PreserveAspectCrop)
+- ✅ Video scale control
+- ✅ Background color
+- ✅ Enhanced loading indicator with progress messages
+- ✅ Timer-based video switching (when LoopVideo is false)
+- ✅ Automatic video switching when video ends (when LoopVideo is false)
+- ✅ Configuration UI fully functional
+- ✅ MediaPlayer state management (LoadingState, PlayingState, StoppedState)
+- ✅ Media status monitoring (LoadedMedia, InvalidMedia)
+
+**⏳ Future Enhancements:**
+- Add Italian translations for video plugin
+- Consider video preloading for smoother transitions
+- Add video metadata display (duration, resolution, codec)
+- Support for more video formats
+
+#### Technical Considerations
+
+1. **MediaPlayer Component:**
+   - Use `QtMultimedia.MediaPlayer` for video playback
+   - Use `VideoOutput` for rendering
+   - Handle video source URLs (may need base64 conversion or direct URL)
+
+2. **Video Loading:**
+   - Similar to image loading via WebDAV
+   - May need different handling for large video files
+   - Consider streaming vs. full download
+
+3. **Performance:**
+   - Videos are larger than images
+   - Consider preloading next video
+   - Memory management for video buffers
+   - CPU/GPU usage for video decoding
+
+4. **Transitions:**
+   - Videos may not need transitions (fade in/out might be sufficient)
+   - Consider crossfade between videos
+   - Video loop vs. switch to next video
+
+5. **Audio:**
+   - Default to muted (wallpaper shouldn't play audio)
+   - Option to enable audio (if user wants)
+
+#### Installation
+
+Both plugins are installed together using `install.sh`:
+```bash
+./install.sh
+```
+
+This installs:
+- `org.nextcloud.carousel` → `~/.local/share/plasma/wallpapers/org.nextcloud.carousel/`
+- `org.nextcloud.video` → `~/.local/share/plasma/wallpapers/org.nextcloud.video/`
+
+Users can then choose either plugin from the Plasma wallpaper list.
+
+#### Future Enhancements
+
+- Video thumbnail generation
+- Video metadata display (duration, resolution, codec)
+- Playback speed control
+- Video filters/effects
+- Support for more video formats
+- Video caching strategy
+
 ## 🎯 Objective
 
 Make all implemented features configurable from the user interface for a complete and customizable experience.

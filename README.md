@@ -1,21 +1,38 @@
-# Nextcloud Carousel - KDE Plasma 6 Wallpaper Plugin
+# Nextcloud Wallpaper Plugins - KDE Plasma 6
 
-A wallpaper plugin for KDE Plasma 6 that creates a photo carousel from your Nextcloud images with smooth transitions and automatic orientation correction.
+Two wallpaper plugins for KDE Plasma 6 that display media from your Nextcloud server:
+- **Nextcloud Carousel**: Photo carousel with smooth transitions and automatic orientation correction
+- **Nextcloud Video**: Video wallpaper with playback controls and automatic switching
 
 > ⚠️ **WARNING**: This project is an **experiment** and is provided "as is" without warranties. Use it at your own risk.
 
 ## Features
 
+### Nextcloud Carousel (Image Plugin)
 - ✅ **Automatic photo carousel** from Nextcloud
 - ✅ **Smooth animated transitions** (Fade, Slide, Zoom)
 - ✅ **Automatic EXIF orientation** correction
 - ✅ **4 ordering modes**: Sequential, Random, Shuffle Once, Smart Random
 - ✅ **Recursive subfolder support** (loads images from all subfolders)
 - ✅ **Multiple image formats**: JPEG, PNG, WebP, GIF, BMP, SVG, TIFF
-- ✅ **WebDAV API integration** with Basic Authentication
 - ✅ **Configurable display settings**: Fill mode, scale, blur, background color
 - ✅ **Transition controls**: Enable/disable, randomize, duration control
 - ✅ **Loading indicator**: Show/hide option
+
+### Nextcloud Video (Video Plugin)
+- ✅ **Video wallpaper** from Nextcloud
+- ✅ **Automatic video switching** with configurable interval
+- ✅ **4 ordering modes**: Sequential, Random, Shuffle Once, Smart Random
+- ✅ **Recursive subfolder support** (loads videos from all subfolders)
+- ✅ **Multiple video formats**: MP4, WebM, OGG, MOV, AVI, MKV, M4V
+- ✅ **Video loop control**: Loop each video or play once
+- ✅ **Audio control**: Mute/unmute option
+- ✅ **Configurable display settings**: Fill mode, scale, background color
+- ✅ **Loading indicator**: Shows progress during video loading
+
+### Common Features
+- ✅ **WebDAV API integration** with Basic Authentication
+- ✅ **Secure authentication** with app password support
 
 ## Requirements
 
@@ -32,7 +49,8 @@ A wallpaper plugin for KDE Plasma 6 that creates a photo carousel from your Next
 ```
 
 The script will:
-- Copy plugin files to `~/.local/share/plasma/wallpapers/org.nextcloud.carousel/`
+- Copy image plugin to `~/.local/share/plasma/wallpapers/org.nextcloud.carousel/`
+- Copy video plugin to `~/.local/share/plasma/wallpapers/org.nextcloud.video/`
 - Display instructions for configuration
 
 ### Manual Install
@@ -58,6 +76,7 @@ killall plasmashell && kstart plasmashell
 
 ### Basic Setup
 
+#### For Image Carousel
 1. **Right-click on desktop** → **Configure Desktop and Wallpaper**
 2. Select **Nextcloud Carousel** from the wallpaper list
 3. Click **Configure** and enter:
@@ -66,6 +85,15 @@ killall plasmashell && kstart plasmashell
    - **Password**: Your password or app password (recommended for security)
    - **Photo Path**: Path to photos folder (default: `/Photos`)
 
+#### For Video Wallpaper
+1. **Right-click on desktop** → **Configure Desktop and Wallpaper**
+2. Select **Nextcloud Video** from the wallpaper list
+3. Click **Configure** and enter:
+   - **Nextcloud URL**: Your server address (e.g., `https://nextcloud.example.com`)
+   - **Username**: Your Nextcloud username
+   - **Password**: Your password or app password (recommended for security)
+   - **Video Path**: Path to videos folder (default: `/Videos`)
+
 ### Configuration Options
 
 #### Nextcloud Settings
@@ -73,10 +101,12 @@ killall plasmashell && kstart plasmashell
 - **Username**: Your Nextcloud username
 - **Password**: Main password or app password (recommended)
   - To create app password: Nextcloud → Settings → Security → App passwords
-- **Photo Path**: Folder path in Nextcloud (supports recursive subfolders)
+- **Photo Path** (Image Plugin): Folder path in Nextcloud (supports recursive subfolders)
   - Examples: `/Photos`, `/Pictures/Vacation`, `/Media/Images`
+- **Video Path** (Video Plugin): Folder path in Nextcloud (supports recursive subfolders)
+  - Examples: `/Videos`, `/Media/Videos`, `/Movies`
 
-#### Carousel Settings
+#### Image Carousel Settings
 - **Slide Interval**: Time between image changes (seconds, recommended: 10-30)
 - **Order Mode**: 
   - **Sequential**: Images in order
@@ -107,7 +137,34 @@ killall plasmashell && kstart plasmashell
 - **Background Color**: Color shown when image doesn't fill screen
 - **Loading Indicator**: Show/hide loading indicator when loading images
 
+#### Video Wallpaper Settings
+- **Video Interval**: Time between video switches (seconds, 5-300, default: 30)
+- **Order Mode**: 
+  - **Sequential**: Videos in order
+  - **Random**: Random order each time
+  - **Shuffle Once**: Shuffled once, then sequential
+  - **Smart Random**: Random but avoids recent repeats
+- **Loop Video**: Loop each video infinitely or play once
+- **Mute Audio**: Mute video audio (recommended for wallpaper)
+- **Fill Mode**: How videos fill the screen
+  - **Stretch**: Fill entire screen (may distort)
+  - **Fit**: Preserve aspect ratio, fit entire video
+  - **Crop**: Preserve aspect ratio, crop to fill (recommended)
+  - Note: Tile modes not supported for videos
+- **Video Scale**: Zoom level (50-200%, default: 100%)
+- **Background Color**: Color shown when video doesn't fill screen
+- **Loading Indicator**: Shows progress during video loading
+
 ## Features Details
+
+### Video Playback
+
+The video plugin supports:
+- **Automatic switching**: Videos change after the configured interval (when loop is disabled)
+- **Loop control**: Each video can loop infinitely or play once
+- **Audio control**: Videos are muted by default (can be enabled)
+- **Smooth loading**: Loading indicator shows progress during video buffering
+- **Error handling**: Automatically skips to next video on playback errors
 
 ### Transitions
 

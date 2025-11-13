@@ -1,0 +1,38 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "nemeyes@hotmail.com",
+                "Name": "Nextcloud Carousel Developer"
+            }
+        ],
+        "Category": "",
+        "Description": "Video wallpaper plugin for displaying videos from Nextcloud",
+        "Description[it]": "Plugin wallpaper video per visualizzare video da Nextcloud",
+        "Icon": "video-x-generic",
+        "Id": "org.nextcloud.video",
+        "License": "GPL-2.0-or-later",
+        "MimeTypes": [
+            "video/mp4",
+            "video/webm",
+            "video/ogg",
+            "video/quicktime",
+            "video/x-msvideo"
+        ],
+        "Name": "Nextcloud Video",
+        "Name[it]": "Video Nextcloud",
+        "Website": "https://nextcloud.com"
+    },
+    "Keywords": "nextcloud,video,wallpaper,media",
+    "MimeType": "video/mp4;video/webm;video/ogg;video/quicktime;video/x-msvideo;",
+    "X-KDE-ParentApp": "org.kde.plasmashell",
+    "X-Plasma-DropMimeTypes": [
+        "video/mp4",
+        "video/webm",
+        "video/ogg",
+        "video/quicktime",
+        "video/x-msvideo"
+    ]
+}
+
