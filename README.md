@@ -22,7 +22,6 @@ A wallpaper plugin for KDE Plasma 6 that creates a photo carousel from your Next
 - **KDE Plasma 6.x**
 - **Qt 6.x**
 - **Accessible Nextcloud server** with WebDAV enabled
-- **Network connection** to Nextcloud server
 
 ## Installation
 
@@ -51,10 +50,9 @@ killall plasmashell && kstart plasmashell
 killall plasmashell && kstart plasmashell
 ```
 
-Or if `kstart` is not available:
-```bash
-killall plasmashell && plasmashell --replace &
-```
+**Note:** If the plugin doesn't appear after restart, you may need to **restart your Plasma session**:
+- **Log out and log back in**, or
+- **Restart your system**
 
 ## Configuration
 
