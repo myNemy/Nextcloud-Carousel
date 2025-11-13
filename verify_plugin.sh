@@ -1,52 +1,52 @@
 #!/bin/bash
-# Script to fix plugin detection issues
+# Script to verify and fix plugin installation
 
 echo "═══════════════════════════════════════════════════════════"
-echo "  Fix Nextcloud Carousel Plugin Detection"
+echo "  Verify Nextcloud Carousel Plugin Installation"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
 PLUGIN_DIR="$HOME/.local/share/plasma/wallpapers/org.nextcloud.carousel"
 
 if [ ! -d "$PLUGIN_DIR" ]; then
-    echo "❌ Plugin non trovato in: $PLUGIN_DIR"
-    echo "   Esegui prima: ./install.sh"
+    echo "❌ Plugin not found in: $PLUGIN_DIR"
+    echo "   Run first: ./install.sh"
     exit 1
 fi
 
-echo "1. Verifica struttura plugin..."
+echo "1. Verifying plugin structure..."
 if [ ! -f "$PLUGIN_DIR/metadata.json" ]; then
-    echo "   ❌ metadata.json mancante!"
+    echo "   ❌ metadata.json missing!"
     exit 1
 fi
 if [ ! -f "$PLUGIN_DIR/contents/ui/main.qml" ]; then
-    echo "   ❌ main.qml mancante!"
+    echo "   ❌ main.qml missing!"
     exit 1
 fi
-echo "   ✅ Struttura OK"
+echo "   ✅ Structure OK"
 echo ""
 
-echo "2. Correzione permessi..."
+echo "2. Fixing permissions..."
 chmod -R 755 "$PLUGIN_DIR"
-echo "   ✅ Permessi corretti"
+echo "   ✅ Permissions fixed"
 echo ""
 
-echo "3. Verifica metadata.json..."
-# Verifica che KPackageStructure sia corretto
+echo "3. Verifying metadata.json..."
+# Verify that KPackageStructure is correct
 if ! grep -q '"KPackageStructure": "Plasma/Wallpaper"' "$PLUGIN_DIR/metadata.json"; then
-    echo "   ⚠️  KPackageStructure potrebbe essere errato"
+    echo "   ⚠️  KPackageStructure might be incorrect"
 fi
 echo "   ✅ metadata.json OK"
 echo ""
 
-echo "4. Riavvio plasmashell..."
+echo "4. Restarting plasmashell..."
 if pgrep -x plasmashell > /dev/null; then
-    echo "   Fermando plasmashell..."
+    echo "   Stopping plasmashell..."
     killall plasmashell 2>/dev/null
     sleep 2
 fi
 
-echo "   Avviando plasmashell con kstart..."
+echo "   Starting plasmashell with kstart..."
 if command -v kstart >/dev/null 2>&1; then
     kstart plasmashell > /dev/null 2>&1
 else
@@ -56,23 +56,23 @@ fi
 sleep 3
 
 if pgrep -x plasmashell > /dev/null; then
-    echo "   ✅ plasmashell riavviato"
+    echo "   ✅ plasmashell restarted"
 else
-    echo "   ⚠️  plasmashell potrebbe non essere avviato correttamente"
-    echo "   Prova manualmente: killall plasmashell && kstart plasmashell"
+    echo "   ⚠️  plasmashell might not have started correctly"
+    echo "   Try manually: killall plasmashell && kstart plasmashell"
 fi
 echo ""
 
 echo "═══════════════════════════════════════════════════════════"
-echo "  COMPLETATO"
+echo "  COMPLETED"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
-echo "Ora prova a:"
-echo "  1. Tasto destro sul desktop → 'Configure Desktop and Wallpaper'"
-echo "  2. Cerca 'Nextcloud Carousel' nella lista"
+echo "Now try:"
+echo "  1. Right-click on desktop → 'Configure Desktop and Wallpaper'"
+echo "  2. Look for 'Nextcloud Carousel' in the list"
 echo ""
-echo "Se non appare ancora:"
-echo "  - Verifica i log: journalctl --user -n 100 | grep -i plasma"
-echo "  - Riavvia la sessione KDE"
+echo "If it still doesn't appear:"
+echo "  - Check logs: journalctl --user -n 100 | grep -i plasma"
+echo "  - Restart KDE session"
 echo ""
 
