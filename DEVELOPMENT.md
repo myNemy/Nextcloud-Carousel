@@ -977,13 +977,21 @@ nextcloud-plasma-addon/
    - Consider preloading next video
    - Memory management for video buffers
    - CPU/GPU usage for video decoding
+   
+4. **Memory Management (IMPROVED):**
+   - ✅ **Aggressive Cleanup**: Explicit `stop()`, `pause()`, and `source = ""` before loading new video
+   - ✅ **VideoOutput Disconnection**: Temporarily disconnect `VideoOutput` during cleanup to force buffer release
+   - ✅ **Cleanup Timer**: 300ms delay timer (instead of `Qt.callLater`) to ensure proper cleanup before loading new video
+   - ✅ **Periodic Reset**: Every 10 video switches, perform aggressive cleanup to prevent memory accumulation
+   - ✅ **Switch Counter**: Track number of video switches for periodic reset
+   - **Note**: This prevents the progressive slowdown issue where videos become slower after extended playback
 
-4. **Transitions:**
+5. **Transitions:**
    - Videos may not need transitions (fade in/out might be sufficient)
    - Consider crossfade between videos
    - Video loop vs. switch to next video
 
-5. **Audio:**
+6. **Audio:**
    - Default to muted (wallpaper shouldn't play audio)
    - Option to enable audio (if user wants)
 

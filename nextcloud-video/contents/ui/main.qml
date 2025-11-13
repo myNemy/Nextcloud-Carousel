@@ -28,6 +28,7 @@ WallpaperItem {
         property int currentIndex: 0
         property bool initialized: false
         property int lastIndex: -1  // Track last shown index
+        property int videoSwitchCount: 0  // Track number of video switches for periodic reset
         
         function initialize() {
             if (root.configuration.NextcloudUrl === "" || 
@@ -139,6 +140,9 @@ WallpaperItem {
                         videoList = videos
                         
                         if (videoList.length > 0) {
+                            // Reset switch counter when reloading video list
+                            videoSwitchCount = 0
+                            
                             // Handle different order modes
                             var orderMode = root.configuration.RandomOrder || 0
                             
@@ -248,26 +252,63 @@ WallpaperItem {
                 console.log("Loading video", currentIndex + 1, "of", videoList.length)
                 console.log("Video URL (without auth):", videoUrl.replace(/https?:\/\/[^@]+@/, ""))
                 
+                // Increment switch counter for periodic reset
+                videoSwitchCount++
+                
+                // Periodic reset every 10 videos to prevent memory accumulation
+                if (videoSwitchCount >= 10) {
+                    console.log("⚠️  Periodic reset: switching video", videoSwitchCount, "- performing aggressive cleanup")
+                    videoSwitchCount = 0
+                    performAggressiveCleanup()
+                }
+                
                 // Stop and cleanup current video for better memory management
                 if (mediaPlayer.playbackState !== MediaPlayer.StoppedState) {
                     mediaPlayer.stop()
+                }
+                
+                // Pause to ensure stop completes
+                if (mediaPlayer.playbackState === MediaPlayer.PlayingState) {
+                    mediaPlayer.pause()
                 }
                 
                 // Clear source to release previous video buffer
                 // This helps prevent memory accumulation when switching videos
                 mediaPlayer.source = ""
                 
-                // Small delay to allow cleanup (Qt.callLater ensures it happens after current execution)
-                Qt.callLater(function() {
-                    // Show loading indicator
-                    root.loading = true
-                    console.log("Loading indicator shown, waiting for video to start playing...")
-                    
-                    // MediaPlayer supports Basic Auth in URL directly
-                    mediaPlayer.source = videoUrl
-                    mediaPlayer.play()
-                })
+                // Temporarily disconnect VideoOutput to force cleanup
+                var wasConnected = (mediaPlayer.videoOutput === videoOutput)
+                if (wasConnected) {
+                    mediaPlayer.videoOutput = null
+                }
+                
+                // Use Timer with longer delay for proper cleanup
+                cleanupTimer.videoUrl = videoUrl
+                cleanupTimer.wasConnected = wasConnected
+                cleanupTimer.start()
             }
+        }
+        
+        function performAggressiveCleanup() {
+            console.log("🔧 Performing aggressive MediaPlayer cleanup...")
+            
+            // Stop and clear
+            if (mediaPlayer.playbackState !== MediaPlayer.StoppedState) {
+                mediaPlayer.stop()
+            }
+            mediaPlayer.pause()
+            mediaPlayer.source = ""
+            
+            // Disconnect VideoOutput
+            mediaPlayer.videoOutput = null
+            
+            // Force garbage collection hint (Qt will handle this)
+            // Small delay to allow cleanup
+            Qt.callLater(function() {
+                // Reconnect VideoOutput
+                mediaPlayer.videoOutput = videoOutput
+                console.log("✅ Aggressive cleanup completed")
+            })
         }
     }
 
@@ -281,6 +322,31 @@ WallpaperItem {
             if (!root.configuration.LoopVideo) {
                 videoController.nextVideo()
             }
+        }
+    }
+    
+    // Timer for cleanup delay before loading new video
+    Timer {
+        id: cleanupTimer
+        interval: 300  // 300ms delay for proper cleanup
+        running: false
+        repeat: false
+        property string videoUrl: ""
+        property bool wasConnected: true
+        
+        onTriggered: {
+            // Show loading indicator
+            root.loading = true
+            console.log("Loading indicator shown, waiting for video to start playing...")
+            
+            // Reconnect VideoOutput if it was connected
+            if (wasConnected && mediaPlayer.videoOutput !== videoOutput) {
+                mediaPlayer.videoOutput = videoOutput
+            }
+            
+            // MediaPlayer supports Basic Auth in URL directly
+            mediaPlayer.source = videoUrl
+            mediaPlayer.play()
         }
     }
 
