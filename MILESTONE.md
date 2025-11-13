@@ -144,7 +144,7 @@ The following settings are implemented in the backend (`main.qml`) but are not y
 
 4. **FillMode** - Image fill mode (Stretch/Fit/Crop/Tile)
    - **Complexity:** Medium - ComboBox with 6 options + translations
-   - **Current behavior:** FULLY IMPLEMENTED in backend - Works correctly
+   - **Status:** ✅ COMPLETE - Fully implemented in UI
    - **Implementation details:**
      - Switch statement in main.qml (lines 403-413) maps values 0-5 to Image.FillMode
      - Applied directly to Image component
@@ -156,7 +156,25 @@ The following settings are implemented in the backend (`main.qml`) but are not y
      - 3 = Image.Tile (tile pattern)
      - 4 = Image.TileVertically (tile vertically)
      - 5 = Image.TileHorizontally (tile horizontally)
-   - **What's missing:** Only ComboBox in config.qml to make it user-configurable
+   - **UI Components:**
+     - ComboBox with 6 options
+     - Translation strings added (EN/IT)
+     - Property alias cfg_FillMode configured
+     - Handler onFillModeChanged implemented
+
+5. **ImageScale** - Image zoom/scale control
+   - **Complexity:** Low-Medium - Slider with percentage display
+   - **Status:** ✅ COMPLETE - Fully implemented
+   - **Implementation details:**
+     - Slider range: 50-200% (default: 100%)
+     - Step size: 5%
+     - Applied as `scale` property on Image component
+     - `transformOrigin: Item.Center` for centered scaling
+     - Conversion: ImageScale/100.0 (50% = 0.5, 100% = 1.0, 200% = 2.0)
+   - **UI Components:**
+     - Slider with label showing current percentage
+     - Property alias cfg_ImageScale configured
+     - Handler onImageScaleChanged implemented
 
 ## 🚧 Development Status
 
@@ -181,16 +199,33 @@ The following settings are implemented in the backend (`main.qml`) but are not y
   - Default opacity: 75% (more visible than initial 90%)
   - Slider disabled when blur checkbox is off
 
+**FillMode and ImageScale (UI Implementation)**
+- **Started:** 2024-11-13
+- **Completed:** 2024-11-13
+- **Status:** ✅ COMPLETE
+- **Implementation:**
+  - ✅ FillMode ComboBox added to config.qml (6 options)
+  - ✅ ImageScale Slider added (50-200%, default: 100%)
+  - ✅ Translation strings added (EN/IT) for all options
+  - ✅ Property aliases configured (cfg_FillMode, cfg_ImageScale)
+  - ✅ Handlers onFillModeChanged and onImageScaleChanged implemented
+  - ✅ Image scale property applied with transformOrigin: Center
+- **Technical details:**
+  - FillMode: ComboBox with user-friendly names
+  - ImageScale: Slider with percentage display (50-200%)
+  - Scale conversion: ImageScale/100.0 for QML scale property
+  - All Tile options (Tile, TileVertically, TileHorizontally) available
+
 ## 📝 Next Steps
 
 1. ✅ Add Blur setting to configuration interface (COMPLETE)
-2. Add remaining missing settings to the configuration interface:
+2. ✅ Add FillMode and ImageScale to configuration interface (COMPLETE)
+3. Add remaining missing settings to the configuration interface:
    - TransitionDuration
    - TransitionType
-   - FillMode
-3. Improve validation and user feedback
-4. Add settings preview
-5. Optimize performance for large photo collections
+4. Improve validation and user feedback
+5. Add settings preview
+6. Optimize performance for large photo collections
 
 ## 🔮 Planned Features
 

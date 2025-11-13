@@ -411,6 +411,9 @@ WallpaperItem {
                 default: return Image.PreserveAspectCrop
                 }
             }
+            // Image scale (zoom) - ImageScale is 50-200, convert to 0.5-2.0
+            scale: root.configuration.ImageScale / 100.0
+            transformOrigin: Item.Center
             asynchronous: true
             cache: true
             smooth: true
@@ -467,6 +470,14 @@ WallpaperItem {
             if (root.configuration.Blur) {
                 imageView.opacity = root.configuration.BlurOpacity / 100.0
             }
+        }
+        function onFillModeChanged() {
+            console.log("FillMode changed:", root.configuration.FillMode)
+        }
+        function onImageScaleChanged() {
+            console.log("Image scale changed:", root.configuration.ImageScale, "%")
+            // Force scale update
+            imageView.scale = root.configuration.ImageScale / 100.0
         }
     }
 }

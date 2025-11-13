@@ -20,6 +20,8 @@ Kirigami.FormLayout {
     property alias cfg_RandomOrder: randomOrderComboBox.currentIndex
     property alias cfg_Blur: blurCheckBox.checked
     property alias cfg_BlurOpacity: blurOpacitySlider.value
+    property alias cfg_FillMode: fillModeComboBox.currentIndex
+    property alias cfg_ImageScale: imageScaleSlider.value
     property alias cfg_Color: colorButton.color
     property alias formLayout: root
 
@@ -93,6 +95,46 @@ Kirigami.FormLayout {
             
             QtControls2.Label {
                 text: Math.round(blurOpacitySlider.value) + " %"
+                width: 50
+                horizontalAlignment: Text.AlignRight
+            }
+        }
+    }
+
+    QtControls2.ComboBox {
+        id: fillModeComboBox
+        Kirigami.FormData.label: i18n("Fill Mode:")
+        model: [
+            i18n("Stretch"),
+            i18n("Fit (Preserve Aspect)"),
+            i18n("Crop (Preserve Aspect)"),
+            i18n("Tile"),
+            i18n("Tile Vertically"),
+            i18n("Tile Horizontally")
+        ]
+        currentIndex: wallpaper.configuration.FillMode || 2
+    }
+
+    Item {
+        Kirigami.FormData.label: i18n("Image Scale (%):")
+        Kirigami.FormData.buddyFor: imageScaleSlider
+        implicitHeight: imageScaleSlider.implicitHeight
+        
+        Row {
+            anchors.fill: parent
+            spacing: 10
+            
+            QtControls2.Slider {
+                id: imageScaleSlider
+                from: 50
+                to: 200
+                stepSize: 5
+                value: wallpaper.configuration.ImageScale || 100
+                width: 200
+            }
+            
+            QtControls2.Label {
+                text: Math.round(imageScaleSlider.value) + " %"
                 width: 50
                 horizontalAlignment: Text.AlignRight
             }

@@ -79,3 +79,27 @@ msgstr "Opacità sfocatura (%):"
 msgid "Lower values make images more transparent (0 = fully transparent, 100 = fully opaque)"
 msgstr "Valori più bassi rendono le immagini più trasparenti (0 = completamente trasparente, 100 = completamente opaco)"
 
+msgid "Fill Mode:"
+msgstr "Modalità riempimento:"
+
+msgid "Stretch"
+msgstr "Allunga"
+
+msgid "Fit (Preserve Aspect)"
+msgstr "Adatta (Mantieni proporzioni)"
+
+msgid "Crop (Preserve Aspect)"
+msgstr "Ritaglia (Mantieni proporzioni)"
+
+msgid "Tile"
+msgstr "Piastrelle"
+
+msgid "Tile Vertically"
+msgstr "Piastrelle verticali"
+
+msgid "Tile Horizontally"
+msgstr "Piastrelle orizzontali"
+
+msgid "Image Scale (%):"
+msgstr "Scala immagine (%):"
+

@@ -56,6 +56,12 @@
       <label>Sizing, cropping and positioning of the wallpaper image</label>
       <default>2</default>
     </entry>
+    <entry name="ImageScale" type="int">
+      <label>Image scale percentage (50-200, 100 = normal size)</label>
+      <default>100</default>
+      <min>50</min>
+      <max>200</max>
+    </entry>
   </group>
 </kcfg>
 
