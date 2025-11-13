@@ -37,6 +37,7 @@ Item {
     required property bool blur
     required property real blurOpacity
     required property real imageScale
+    required property real orientation  // EXIF orientation rotation angle in degrees (0, 90, -90, 180)
     
     // Expose image status for loading detection
     // Note: statusChanged signal is automatically available via property alias
@@ -68,7 +69,14 @@ Item {
             }
         }
         scale: imageComponent.imageScale / 100.0
+        rotation: imageComponent.orientation  // Apply EXIF orientation rotation
         transformOrigin: Item.Center
+        
+        Component.onCompleted: {
+            if (imageComponent.orientation !== 0) {
+                console.log("ImageComponent: Applying rotation", imageComponent.orientation, "degrees to image")
+            }
+        }
         asynchronous: true
         cache: true
         smooth: true

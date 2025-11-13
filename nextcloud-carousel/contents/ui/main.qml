@@ -279,6 +279,170 @@ WallpaperItem {
             return base64
         }
         
+        // Read EXIF orientation from JPEG ArrayBuffer
+        // Returns rotation angle in degrees (0, 90, -90, 180) or 0 if not found/error
+        function readExifOrientation(arrayBuffer) {
+            try {
+                var bytes = new Uint8Array(arrayBuffer)
+                console.log("readExifOrientation: Image size:", bytes.length, "bytes")
+                
+                // Check if it's a JPEG (starts with 0xFFD8)
+                if (bytes.length < 2 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) {
+                    console.log("⚠️  Not a JPEG image (first bytes:", bytes[0], bytes[1], "), skipping EXIF orientation")
+                    return 0  // Not a JPEG, assume normal orientation
+                }
+                console.log("✅ JPEG header found (0xFFD8)")
+                
+                // Search for APP1 marker (0xFFE1) which contains EXIF data
+                var i = 2  // Start after SOI marker
+                var app1Found = false
+                while (i < bytes.length - 1) {
+                    // Check for APP1 marker
+                    if (bytes[i] === 0xFF && bytes[i + 1] === 0xE1) {
+                        app1Found = true
+                        console.log("✅ APP1 marker found at offset:", i)
+                        // Found APP1 segment
+                        var segmentLength = (bytes[i + 2] << 8) | bytes[i + 3]
+                        var segmentStart = i + 4
+                        console.log("  Segment length:", segmentLength, "Segment start:", segmentStart)
+                        
+                        // Check if it's an EXIF segment (starts with "Exif\0\0")
+                        if (segmentStart + 6 <= bytes.length) {
+                            var exifHeader = String.fromCharCode(
+                                bytes[segmentStart],
+                                bytes[segmentStart + 1],
+                                bytes[segmentStart + 2],
+                                bytes[segmentStart + 3],
+                                bytes[segmentStart + 4],
+                                bytes[segmentStart + 5]
+                            )
+                            console.log("  Header check:", exifHeader, "===", "Exif\0\0", "?", exifHeader === "Exif\0\0")
+                            
+                            if (exifHeader === "Exif\0\0") {
+                                console.log("✅ EXIF segment found!")
+                                // Found EXIF segment, now find Orientation tag (0x0112)
+                                // EXIF structure: TIFF header (8 bytes) + IFD0
+                                var tiffOffset = segmentStart + 6
+                                
+                                if (tiffOffset + 8 > bytes.length) break
+                                
+                                // Check byte order (0x4949 = Intel, 0x4D4D = Motorola)
+                                var isIntel = (bytes[tiffOffset] === 0x49 && bytes[tiffOffset + 1] === 0x49)
+                                
+                                // Read IFD0 offset (offset 4 from TIFF start, 4 bytes)
+                                var ifd0OffsetAddr = tiffOffset + 4
+                                if (ifd0OffsetAddr + 4 > bytes.length) break
+                                
+                                var ifd0Offset
+                                if (isIntel) {
+                                    ifd0Offset = bytes[ifd0OffsetAddr] | (bytes[ifd0OffsetAddr + 1] << 8) | 
+                                                 (bytes[ifd0OffsetAddr + 2] << 16) | (bytes[ifd0OffsetAddr + 3] << 24)
+                                } else {
+                                    ifd0Offset = (bytes[ifd0OffsetAddr] << 24) | (bytes[ifd0OffsetAddr + 1] << 16) | 
+                                                 (bytes[ifd0OffsetAddr + 2] << 8) | bytes[ifd0OffsetAddr + 3]
+                                }
+                                
+                                // IFD0 address is relative to TIFF start
+                                var ifd0Addr = tiffOffset + ifd0Offset
+                                
+                                // Read number of IFD entries
+                                if (ifd0Addr + 2 > bytes.length) break
+                                
+                                var numEntries
+                                if (isIntel) {
+                                    numEntries = bytes[ifd0Addr] | (bytes[ifd0Addr + 1] << 8)
+                                } else {
+                                    numEntries = (bytes[ifd0Addr] << 8) | bytes[ifd0Addr + 1]
+                                }
+                                
+                                // Search for Orientation tag (0x0112) in IFD0
+                                var entryOffset = ifd0Addr + 2
+                                for (var e = 0; e < numEntries && entryOffset + 12 <= bytes.length; e++) {
+                                    var tag
+                                    if (isIntel) {
+                                        tag = bytes[entryOffset] | (bytes[entryOffset + 1] << 8)
+                                    } else {
+                                        tag = (bytes[entryOffset] << 8) | bytes[entryOffset + 1]
+                                    }
+                                    
+                                    // Orientation tag is 0x0112 (274)
+                                    if (tag === 0x0112) {
+                                        console.log("✅ Orientation tag (0x0112) found at entry", e)
+                                        // Read orientation value (offset 8 from entry start)
+                                        var valueOffset = entryOffset + 8
+                                        var orientation
+                                        if (isIntel) {
+                                            orientation = bytes[valueOffset] | (bytes[valueOffset + 1] << 8)
+                                        } else {
+                                            orientation = (bytes[valueOffset] << 8) | bytes[valueOffset + 1]
+                                        }
+                                        console.log("  EXIF orientation value:", orientation, "(1=normal, 3=180°, 6=90°CW, 8=90°CCW)")
+                                        
+                                        // Convert EXIF orientation to rotation angle
+                                        // EXIF orientation values:
+                                        // 1 = Normal (0°)
+                                        // 3 = Rotated 180° (needs 180° correction)
+                                        // 6 = Rotated 90° clockwise (needs +90° counter-clockwise correction)
+                                        // 8 = Rotated 90° counter-clockwise (needs -90° clockwise correction)
+                                        // Note: In QML, positive rotation is counter-clockwise, negative is clockwise
+                                        var rotationAngle
+                                        switch (orientation) {
+                                        case 1: 
+                                            rotationAngle = 0
+                                            console.log("  → Rotation: 0° (normal)")
+                                            return rotationAngle
+                                        case 3: 
+                                            rotationAngle = 180
+                                            console.log("  → Rotation: 180° (upside down)")
+                                            return rotationAngle
+                                        case 6: 
+                                            // Image was rotated 90° clockwise, need to rotate 90° counter-clockwise to correct
+                                            rotationAngle = 90
+                                            console.log("  → Rotation: 90° (image was 90°CW, correcting with 90°CCW)")
+                                            return rotationAngle
+                                        case 8: 
+                                            // Image was rotated 90° counter-clockwise, need to rotate 90° clockwise to correct
+                                            rotationAngle = -90
+                                            console.log("  → Rotation: -90° (image was 90°CCW, correcting with 90°CW)")
+                                            return rotationAngle
+                                        default: 
+                                            console.log("  ⚠️  Unknown orientation value:", orientation, "→ assuming 0°")
+                                            return 0    // Unknown, assume normal
+                                        }
+                                    }
+                                    
+                                    entryOffset += 12  // Each IFD entry is 12 bytes
+                                }
+                            }
+                        }
+                        
+                        // Move to next segment
+                        i += 2 + segmentLength
+                    } else if (bytes[i] === 0xFF && (bytes[i + 1] & 0xF0) === 0xE0) {
+                        // Other APP segment, skip it
+                        var segLen = (bytes[i + 2] << 8) | bytes[i + 3]
+                        i += 2 + segLen
+                    } else if (bytes[i] === 0xFF && bytes[i + 1] === 0xDA) {
+                        // Start of scan (SOS), no more segments
+                        break
+                    } else {
+                        i++
+                    }
+                }
+                
+                // Orientation not found
+                if (!app1Found) {
+                    console.log("⚠️  APP1 marker not found in JPEG, no EXIF data")
+                } else {
+                    console.log("⚠️  EXIF segment found but Orientation tag (0x0112) not found in IFD0")
+                }
+                return 0  // Orientation not found, assume normal
+            } catch (e) {
+                console.warn("❌ Error reading EXIF orientation:", e)
+                return 0  // On error, assume normal orientation
+            }
+        }
+        
         function loadImageWithAuth(imageUrl, skipAnimation) {
             root.loading = true
             
@@ -309,12 +473,8 @@ WallpaperItem {
                     if (xhr.status === 200) {
                         console.log("Image downloaded, size:", xhr.response.byteLength, "bytes")
                         
-                        // Convert arraybuffer to base64 data URL
-                        // btoa() might not be available, use manual base64 encoding
-                        var bytes = new Uint8Array(xhr.response)
-                        var base64 = arrayBufferToBase64(bytes)
-                        
-                        // Determine MIME type from URL
+                        // Read EXIF orientation before converting to base64
+                        var orientation = 0
                         var mimeType = "image/jpeg"
                         if (cleanUrl.toLowerCase().indexOf(".png") !== -1) {
                             mimeType = "image/png"
@@ -325,6 +485,25 @@ WallpaperItem {
                         } else if (cleanUrl.toLowerCase().indexOf(".svg") !== -1) {
                             mimeType = "image/svg+xml"
                         }
+                        
+                        // Read EXIF orientation for JPEG images
+                        if (mimeType === "image/jpeg") {
+                            console.log("Reading EXIF orientation from JPEG image...")
+                            orientation = readExifOrientation(xhr.response)
+                            console.log("EXIF orientation result:", orientation, "degrees (0=normal, 90=rotate 90°, -90=rotate -90°, 180=rotate 180°)")
+                            if (orientation !== 0) {
+                                console.log("✅ EXIF orientation detected, rotation will be applied:", orientation, "degrees")
+                            } else {
+                                console.log("ℹ️  No EXIF orientation found or orientation is normal (0°)")
+                            }
+                        } else {
+                            console.log("Not a JPEG image, skipping EXIF orientation (MIME type:", mimeType, ")")
+                        }
+                        
+                        // Convert arraybuffer to base64 data URL
+                        // btoa() might not be available, use manual base64 encoding
+                        var bytes = new Uint8Array(xhr.response)
+                        var base64 = arrayBufferToBase64(bytes)
                         
                         var dataUrl = "data:" + mimeType + ";base64," + base64
                         console.log("Image converted to data URL, MIME type:", mimeType)
@@ -364,6 +543,7 @@ WallpaperItem {
                             // Set initial position/scale based on transition type
                             var initialX = (imageStack.transitionType === 1) ? imageStack.width : 0
                             var initialScale = (imageStack.transitionType === 2) ? 0.8 : 1.0
+                            console.log("Creating ImageComponent with orientation:", orientation, "degrees")
                             imageStack.pendingImage = component.createObject(imageStack, {
                                 "source": dataUrl,
                                 "fillMode": root.configuration.FillMode,
@@ -371,11 +551,16 @@ WallpaperItem {
                                 "blur": root.configuration.Blur,
                                 "blurOpacity": root.configuration.BlurOpacity,
                                 "imageScale": root.configuration.ImageScale,
+                                "orientation": orientation,
                                 "width": imageStack.width,
                                 "height": imageStack.height,
                                 "x": initialX,
                                 "scale": initialScale
                             })
+                            
+                            if (imageStack.pendingImage) {
+                                console.log("ImageComponent created with orientation property:", imageStack.pendingImage.orientation, "degrees")
+                            }
                             
                             if (imageStack.pendingImage) {
                                 console.log("Image component created:")

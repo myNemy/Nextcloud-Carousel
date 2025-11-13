@@ -95,6 +95,7 @@ The Nextcloud Carousel plugin has reached a working base with the following feat
    - ✅ FillMode implemented (Stretch, Fit, Crop, Tile) - backend + UI
    - ✅ Blur implemented - simplified (opacity reduction, not true blur) - backend + UI
    - ✅ ImageScale implemented - backend + UI
+   - ✅ **Automatic EXIF orientation** - Images automatically rotated based on EXIF orientation data
 
 5. **Interface**
    - ✅ Working configuration UI
@@ -389,9 +390,10 @@ To implement actual image transitions, the following is required:
 5. ✅ Implement transition system in backend - All transitions working (COMPLETE)
 6. ✅ Implement Slide and Zoom transitions (COMPLETE)
 7. ✅ Add TransitionEnabled and TransitionRandom settings (COMPLETE)
-8. Improve validation and user feedback
-9. Add settings preview
-8. Optimize performance for large photo collections
+8. ✅ Implement automatic EXIF orientation detection and rotation (COMPLETE)
+9. Improve validation and user feedback
+10. Add settings preview
+11. Optimize performance for large photo collections
 
 ## 🎯 What Needs to Be Done Now
 
@@ -750,12 +752,17 @@ If implementing transitions is too complex right now, we can focus on:
   - Date and time (from EXIF)
   - Full EXIF metadata access
 
-### Automatic Orientation
+### Automatic Orientation - ✅ FULLY IMPLEMENTED AND TESTED
 - **Smart Orientation Detection:**
-  - Automatic horizontal/vertical detection
-  - Rotation based on EXIF orientation data
-  - Optimal display based on image aspect ratio
-  - Support for portrait and landscape modes
+  - ✅ Automatic EXIF orientation reading from JPEG images
+  - ✅ Rotation based on EXIF orientation data (0°, 90°, -90°, 180°)
+  - ✅ Support for all standard EXIF orientation values (1, 3, 6, 8)
+  - ✅ Automatic rotation applied to images during display
+  - ✅ Works with both Intel and Motorola byte order
+  - ✅ Correct rotation direction (QML positive = counter-clockwise)
+  - ✅ Tested and verified working with real images
+  - ⏳ Optimal display based on image aspect ratio (future enhancement)
+  - ⏳ Support for portrait and landscape modes detection (future enhancement)
 
 ## 🎯 Objective
 
