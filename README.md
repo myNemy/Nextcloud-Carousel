@@ -102,3 +102,7 @@ killall plasmashell && plasmashell &
 ## License
 
 GPL-2.0-or-later
+
+---
+
+**Note**: This project was developed using [Cursor](https://cursor.sh), an AI-powered code editor.
