@@ -10,6 +10,8 @@ import org.kde.plasma.wallpapers.image as Wallpaper
 import org.kde.plasma.plasmoid
 import org.kde.kirigami as Kirigami
 
+import "."
+
 WallpaperItem {
     id: root
 
@@ -328,8 +330,10 @@ WallpaperItem {
                         
                         var dataUrl = "data:" + mimeType + ";base64," + base64
                         console.log("Image converted to data URL, MIME type:", mimeType)
-                        console.log("Setting image source (data URL length:", dataUrl.length, ")")
-                        imageView.source = dataUrl
+                        console.log("Creating pending image component (data URL length:", dataUrl.length, ")")
+                        
+                        // Create pending image component using ImageComponent.qml
+                        loadImageComponent(dataUrl)
                     } else {
                         console.error("Failed to load image. Status:", xhr.status, xhr.statusText)
                         if (xhr.status === 401) {
@@ -348,6 +352,91 @@ WallpaperItem {
             }
             
             xhr.send()
+        }
+        
+        property Item pendingImage: null
+        property bool doesSkipAnimation: true
+        
+        function loadImageComponent(dataUrl) {
+            // Clean up previous pending image if exists
+            if (pendingImage) {
+                pendingImage.statusChanged.disconnect(replaceWhenLoaded)
+                pendingImage.destroy()
+                pendingImage = null
+            }
+            
+            // Check if we should skip animation (first image or size change)
+            doesSkipAnimation = imageStack.currentItem === undefined
+            
+            // Create ImageComponent
+            var component = Qt.createComponent("ImageComponent.qml")
+            if (component.status === Component.Error) {
+                console.error("Error creating ImageComponent:", component.errorString())
+                root.loading = false
+                return
+            }
+            
+            pendingImage = component.createObject(imageStack, {
+                "source": dataUrl,
+                "fillMode": root.configuration.FillMode,
+                "color": root.configuration.Color,
+                "blur": root.configuration.Blur,
+                "blurOpacity": root.configuration.BlurOpacity,
+                "imageScale": root.configuration.ImageScale,
+                "sourceSize": Qt.size(root.width * Screen.devicePixelRatio, root.height * Screen.devicePixelRatio)
+            })
+            
+            if (!pendingImage) {
+                console.error("Failed to create ImageComponent")
+                root.loading = false
+                return
+            }
+            
+            // Connect to statusChanged to replace when loaded
+            pendingImage.statusChanged.connect(replaceWhenLoaded)
+            replaceWhenLoaded()
+        }
+        
+        function replaceWhenLoaded() {
+            if (!pendingImage) {
+                return
+            }
+            
+            if (pendingImage.status === Image.Loading) {
+                return
+            }
+            
+            // Disconnect signal
+            pendingImage.statusChanged.disconnect(replaceWhenLoaded)
+            
+            // Store reference for cleanup
+            var imageToReplace = pendingImage
+            pendingImage = null
+            
+            // Cleanup old image when removed (KDE pattern)
+            imageToReplace.QQC2.StackView.onDeactivated.connect(function() {
+                Qt.callLater(function() {
+                    if (imageToReplace) {
+                        imageToReplace.destroy()
+                    }
+                })
+            })
+            imageToReplace.QQC2.StackView.onRemoved.connect(function() {
+                Qt.callLater(function() {
+                    if (imageToReplace) {
+                        imageToReplace.destroy()
+                    }
+                })
+            })
+            
+            // Replace with transition (KDE pattern)
+            imageStack.replace(imageToReplace, {}, QQC2.StackView.Transition)
+            
+            root.loading = false
+            
+            if (imageToReplace.status !== Image.Ready) {
+                console.warn("Image not ready, status:", imageToReplace.status)
+            }
         }
     }
     
@@ -370,74 +459,97 @@ WallpaperItem {
             color: root.configuration.Color
         }
         
-        // Image stack for smooth transitions
+        // Image stack for smooth transitions (KDE pattern)
         QQC2.StackView {
             id: imageStack
             anchors.fill: parent
             
-            property int transitionDuration: root.configuration.TransitionDuration
+            property int transitionType: root.configuration.TransitionType || 0
+            property int transitionDuration: root.configuration.TransitionDuration || 1000
+            property bool doesSkipAnimation: carouselController.doesSkipAnimation
             
-            pushEnter: Transition {
-                PropertyAnimation {
-                    property: "opacity"
+            // Replace enter transition (new image appears)
+            replaceEnter: Transition {
+                id: enterTransition
+                enabled: !imageStack.doesSkipAnimation
+                
+                // Fade transition (default, type 0)
+                OpacityAnimator {
+                    id: fadeEnterAnimator
                     from: 0
                     to: 1
                     duration: imageStack.transitionDuration
+                    enabled: imageStack.transitionType === 0
+                }
+                
+                // Slide transition (type 1) - horizontal slide in
+                XAnimator {
+                    id: slideEnterAnimator
+                    from: imageStack.width
+                    to: 0
+                    duration: imageStack.transitionDuration
+                    enabled: imageStack.transitionType === 1
+                }
+                
+                // Zoom transition (type 2) - zoom in
+                ScaleAnimator {
+                    id: zoomEnterAnimator
+                    from: 0.8
+                    to: 1.0
+                    duration: imageStack.transitionDuration
+                    enabled: imageStack.transitionType === 2
+                }
+                
+                // Always fade in even for slide/zoom (for smooth effect)
+                OpacityAnimator {
+                    from: 0
+                    to: 1
+                    duration: imageStack.transitionDuration
+                    enabled: imageStack.transitionType !== 0
                 }
             }
             
-            pushExit: Transition {
-                PropertyAnimation {
-                    property: "opacity"
+            // Replace exit transition (old image disappears)
+            replaceExit: Transition {
+                // Keep old image until new one is fully visible (KDE pattern)
+                // Prevents background from showing through
+                PauseAnimation {
+                    duration: imageStack.transitionDuration + 100
+                }
+                
+                // Fade out old image
+                OpacityAnimator {
+                    id: fadeExitAnimator
                     from: 1
                     to: 0
                     duration: imageStack.transitionDuration
+                    enabled: imageStack.transitionType === 0
                 }
-            }
-        }
-        
-        // Current image display
-        Image {
-            id: imageView
-            anchors.fill: parent
-            fillMode: {
-                switch (root.configuration.FillMode) {
-                case 0: return Image.Stretch
-                case 1: return Image.PreserveAspectFit
-                case 2: return Image.PreserveAspectCrop
-                case 3: return Image.Tile
-                case 4: return Image.TileVertically
-                case 5: return Image.TileHorizontally
-                default: return Image.PreserveAspectCrop
+                
+                // Slide out (type 1) - horizontal slide out
+                XAnimator {
+                    id: slideExitAnimator
+                    from: 0
+                    to: -imageStack.width
+                    duration: imageStack.transitionDuration
+                    enabled: imageStack.transitionType === 1
                 }
-            }
-            // Image scale (zoom) - ImageScale is 50-200, convert to 0.5-2.0
-            scale: root.configuration.ImageScale / 100.0
-            transformOrigin: Item.Center
-            asynchronous: true
-            cache: true
-            smooth: true
-            
-            // Blur effect - simplified for now
-            // Note: Full blur effect would require additional QML components
-            // Using opacity reduction as simplified blur effect
-            // BlurOpacity is 0-100, convert to 0.0-1.0
-            opacity: root.configuration.Blur ? (root.configuration.BlurOpacity / 100.0) : 1.0
-            
-            // Fade transition
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.configuration.TransitionDuration
-                    easing.type: Easing.InOutQuad
+                
+                // Zoom out (type 2) - zoom out
+                ScaleAnimator {
+                    id: zoomExitAnimator
+                    from: 1.0
+                    to: 1.2
+                    duration: imageStack.transitionDuration
+                    enabled: imageStack.transitionType === 2
                 }
-            }
-            
-            onStatusChanged: {
-                if (status === Image.Ready) {
-                    root.loading = false
-                } else if (status === Image.Error) {
-                    console.warn("Failed to load image:", source)
-                    root.loading = false
+                
+                // Always fade out even for slide/zoom (for smooth effect)
+                OpacityAnimator {
+                    from: 1
+                    to: 0
+                    duration: imageStack.transitionDuration
+                    enabled: imageStack.transitionType !== 0
                 }
             }
         }
@@ -461,23 +573,29 @@ WallpaperItem {
         }
         function onBlurChanged() {
             console.log("Blur setting changed:", root.configuration.Blur)
-            // Force opacity update
-            imageView.opacity = root.configuration.Blur ? (root.configuration.BlurOpacity / 100.0) : 1.0
+            // Blur is now handled in ImageComponent
         }
         function onBlurOpacityChanged() {
             console.log("Blur opacity changed:", root.configuration.BlurOpacity, "%")
-            // Force opacity update if blur is enabled
-            if (root.configuration.Blur) {
-                imageView.opacity = root.configuration.BlurOpacity / 100.0
-            }
+            // Blur opacity is now handled in ImageComponent
         }
         function onFillModeChanged() {
             console.log("FillMode changed:", root.configuration.FillMode)
+            // FillMode is now handled in ImageComponent
         }
         function onImageScaleChanged() {
             console.log("Image scale changed:", root.configuration.ImageScale, "%")
-            // Force scale update
-            imageView.scale = root.configuration.ImageScale / 100.0
+            // ImageScale is now handled in ImageComponent
+        }
+        function onTransitionTypeChanged() {
+            console.log("Transition type changed:", root.configuration.TransitionType)
+            // Update StackView transition type
+            imageStack.transitionType = root.configuration.TransitionType || 0
+        }
+        function onTransitionDurationChanged() {
+            console.log("Transition duration changed:", root.configuration.TransitionDuration, "ms")
+            // Update StackView transition duration
+            imageStack.transitionDuration = root.configuration.TransitionDuration || 1000
         }
     }
 }
