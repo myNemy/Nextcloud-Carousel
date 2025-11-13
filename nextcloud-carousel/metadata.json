@@ -1,0 +1,46 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "developer@example.com",
+                "Name": "Nextcloud Carousel Developer"
+            }
+        ],
+        "Category": "",
+        "Description": "Carousel wallpaper plugin for displaying photos from Nextcloud",
+        "Description[it]": "Plugin wallpaper carosello per visualizzare foto da Nextcloud",
+        "Icon": "folder-image",
+        "Id": "org.nextcloud.carousel",
+        "License": "GPL-2.0-or-later",
+        "MimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/svg+xml",
+            "image/svg+xml-compressed",
+            "image/bmp",
+            "image/webp",
+            "image/tiff",
+            "image/gif"
+        ],
+        "Name": "Nextcloud Carousel",
+        "Name[it]": "Carosello Nextcloud",
+        "Website": "https://nextcloud.com"
+    },
+    "Keywords": "nextcloud,carousel,slideshow,photos",
+    "MimeType": "image/avif;image/gif;image/heif;image/jpeg;image/png;image/svg+xml;image/svg+xml-compressed;image/bmp;image/webp;image/tiff;",
+    "X-KDE-ParentApp": "org.kde.plasmashell",
+    "X-Plasma-DropMimeTypes": [
+        "image/avif",
+        "image/gif",
+        "image/heif",
+        "image/jpeg",
+        "image/png",
+        "image/svg+xml",
+        "image/svg+xml-compressed",
+        "image/bmp",
+        "image/webp",
+        "image/tiff"
+    ]
+}
+

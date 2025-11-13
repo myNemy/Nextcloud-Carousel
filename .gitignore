@@ -1,0 +1,15 @@
+# Build directories
+build/
+.cmake/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+
