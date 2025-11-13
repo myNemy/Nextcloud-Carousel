@@ -194,6 +194,74 @@ All major settings are now implemented in both backend and UI. The following are
      - Property alias cfg_ImageScale configured
      - Handler onImageScaleChanged implemented
 
+## 🌐 Nextcloud WebDAV Integration
+
+### Implementation Details
+
+Image loading from Nextcloud has been implemented using the WebDAV API.
+
+#### 1. Authentication
+- Uses Basic Authentication with username and password
+- Builds the WebDAV URL: `https://nextcloud.example.com/remote.php/dav/files/USERNAME/PATH`
+- Credentials are included in the URL (Basic Auth)
+- **Security recommendation**: Use app password instead of main password for better security
+
+#### 2. File Listing (PROPFIND)
+- Executes a PROPFIND request with `Depth=infinity` to list files recursively
+- Includes all subfolders in the search
+- Parses the XML response using regex to extract file paths
+- Filters only image files (jpg, jpeg, png, gif, webp, bmp, svg, tiff)
+
+#### 3. Image URL Construction
+- Builds direct URLs for image download
+- Adds authentication to the URL to allow download
+- Format: `https://username:password@server.com/remote.php/dav/files/USERNAME/PATH/image.jpg`
+
+#### 4. Image Download and Conversion
+- Images are downloaded via `XMLHttpRequest` with Basic Authentication
+- `responseType = "arraybuffer"` for binary data
+- ArrayBuffer → Base64 conversion (manual, `btoa()` not available in QML)
+- Creates data URL: `"data:image/jpeg;base64,..."`
+- QML Image component doesn't support authenticated URLs directly, hence base64 conversion
+
+#### 5. Supported Formats
+- JPEG/JPG
+- PNG
+- GIF
+- WebP
+- BMP
+- SVG
+- TIFF
+
+#### 6. Technical Notes
+- Plugin loads images asynchronously
+- Images are converted to base64 data URLs for QML compatibility
+- WebDAV XML parsing uses regex (DOMParser might not be available in QML)
+
+#### Troubleshooting
+
+If images don't load:
+
+1. **Verify credentials**: Username and password must be correct
+2. **Verify path**: The photo path must exist in Nextcloud
+3. **Verify permissions**: You must have access to the folder in Nextcloud
+4. **Check logs**: 
+   ```bash
+   journalctl --user -b | grep -i "nextcloud\|carousel"
+   ```
+   Or enable QML debug logging:
+   ```bash
+   QT_LOGGING_RULES="qml.debug=true" plasmashell
+   ```
+
+#### Future Improvements
+- ⏳ Local image cache
+- ⏳ OAuth2 support
+- ⏳ Improved error handling
+- ⏳ Loading progress indicator
+
+---
+
 ## 🔄 Image Loading Process (Technical Details)
 
 ### Current Image Change Flow
