@@ -835,7 +835,7 @@ WallpaperItem {
         // Loading indicator
         Kirigami.LoadingPlaceholder {
             anchors.centerIn: parent
-            visible: root.loading
+            visible: root.loading && root.configuration.ShowLoadingIndicator
         }
     }
     

@@ -130,3 +130,9 @@ msgstr "Piastrelle orizzontali"
 msgid "Image Scale (%):"
 msgstr "Scala immagine (%):"
 
+msgid "Loading Indicator:"
+msgstr "Indicatore di caricamento:"
+
+msgid "Show loading indicator when loading images"
+msgstr "Mostra indicatore di caricamento durante il caricamento delle immagini"
+

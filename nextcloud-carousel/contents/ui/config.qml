@@ -27,6 +27,7 @@ Kirigami.FormLayout {
     property alias cfg_FillMode: fillModeComboBox.currentIndex
     property alias cfg_ImageScale: imageScaleSlider.value
     property alias cfg_Color: colorButton.color
+    property alias cfg_ShowLoadingIndicator: showLoadingIndicatorCheckBox.checked
     property alias formLayout: root
 
     QtControls2.TextField {
@@ -184,5 +185,11 @@ Kirigami.FormLayout {
         id: colorButton
         Kirigami.FormData.label: i18n("Background Color:")
         dialogTitle: i18n("Select Background Color")
+    }
+
+    QtControls2.CheckBox {
+        id: showLoadingIndicatorCheckBox
+        Kirigami.FormData.label: i18n("Loading Indicator:")
+        text: i18n("Show loading indicator when loading images")
     }
 }

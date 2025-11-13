@@ -70,6 +70,10 @@
       <min>50</min>
       <max>200</max>
     </entry>
+    <entry name="ShowLoadingIndicator" type="bool">
+      <label>Show loading indicator when loading images</label>
+      <default>true</default>
+    </entry>
   </group>
 </kcfg>
 
