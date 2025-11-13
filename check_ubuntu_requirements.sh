@@ -51,12 +51,17 @@ else
         echo "   💡 Found packages: $PLASMA_PACKAGES"
         PLASMA_INSTALLED=true
         
-        # Try to get version from package
+        # Try to get version from package (handle epoch:version format)
         PLASMA_PKG_VERSION=$(dpkg -l | grep -E "^ii.*plasma-workspace" | awk '{print $3}' | head -1)
         if [ -n "$PLASMA_PKG_VERSION" ]; then
-            PLASMA_MAJOR=$(echo "$PLASMA_PKG_VERSION" | cut -d. -f1)
-            if [ "$PLASMA_MAJOR" -ge 6 ]; then
+            # Remove epoch if present (format: epoch:version)
+            VERSION_ONLY=$(echo "$PLASMA_PKG_VERSION" | sed 's/^[0-9]*://')
+            PLASMA_MAJOR=$(echo "$VERSION_ONLY" | cut -d. -f1)
+            # Check if it's a valid number before comparing
+            if [ -n "$PLASMA_MAJOR" ] && [ "$PLASMA_MAJOR" -ge 6 ] 2>/dev/null; then
                 echo "   ✅ Plasma package version 6.x or higher (compatible)"
+            elif [ -n "$PLASMA_MAJOR" ] && [ "$PLASMA_MAJOR" -ge 5 ] 2>/dev/null; then
+                echo "   ⚠️  Plasma package version 5.x (may work but 6.x recommended)"
             fi
         fi
     else
