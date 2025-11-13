@@ -6,6 +6,35 @@ echo "  Nextcloud Carousel - Ubuntu 25.04 Requirements Check"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
+# Function to check if a package exists in repository
+package_exists() {
+    local pkg="$1"
+    apt-cache show "$pkg" >/dev/null 2>&1
+}
+
+# Function to find alternative packages
+find_alternative() {
+    local primary="$1"
+    shift
+    local alternatives=("$@")
+    
+    # First check if primary exists
+    if package_exists "$primary"; then
+        echo "$primary"
+        return 0
+    fi
+    
+    # Check alternatives
+    for alt in "${alternatives[@]}"; do
+        if package_exists "$alt"; then
+            echo "$alt"
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
 # Function to search for available packages
 search_packages() {
     echo "🔍 Searching for available KDE packages on this system..."
@@ -144,10 +173,12 @@ ALTERNATIVE_NAMES=(
 
 
 MISSING_PACKAGES=()
+AVAILABLE_ALTERNATIVES=()
 for package in "${REQUIRED_PACKAGES[@]}"; do
     # Check if package is installed (handle different naming)
     INSTALLED=false
     INSTALLED_NAME=""
+    AVAILABLE_IN_REPO=""
     
     # Try primary name
     if dpkg -l | grep -q "^ii.*$package"; then
@@ -157,31 +188,52 @@ for package in "${REQUIRED_PACKAGES[@]}"; do
         # Try alternative names based on package
         case "$package" in
             "libkf6plasma-dev")
-                for alt in libkf5plasma-dev libplasma6-dev libplasma-dev libplasma6 plasma-framework-dev libkf6-plasma-dev; do
+                ALTERNATIVES=(libkf5plasma-dev libplasma6-dev libplasma-dev libplasma6 plasma-framework-dev libkf6-plasma-dev)
+                for alt in "${ALTERNATIVES[@]}"; do
                     if dpkg -l | grep -qE "^ii.*$alt"; then
                         INSTALLED=true
                         INSTALLED_NAME="$alt"
                         break
                     fi
                 done
+                # If not installed, check what's available in repo
+                if [ "$INSTALLED" = false ]; then
+                    AVAILABLE_IN_REPO=$(find_alternative "$package" "${ALTERNATIVES[@]}")
+                fi
                 ;;
             "kirigami2-dev")
-                for alt in libkirigami-dev libkf5kirigami2-5 libkirigami2 libkf6kirigami2-dev libkf6-kirigami-dev libkf5-kirigami-dev libkirigami2-6; do
+                ALTERNATIVES=(libkirigami-dev libkf5kirigami2-5 libkirigami2 libkf6kirigami2-dev libkf6-kirigami-dev libkf5-kirigami-dev libkirigami2-6)
+                for alt in "${ALTERNATIVES[@]}"; do
                     if dpkg -l | grep -qE "^ii.*$alt"; then
                         INSTALLED=true
                         INSTALLED_NAME="$alt"
                         break
                     fi
                 done
+                # If not installed, check what's available in repo
+                if [ "$INSTALLED" = false ]; then
+                    AVAILABLE_IN_REPO=$(find_alternative "$package" "${ALTERNATIVES[@]}")
+                fi
                 ;;
             "libkf6kcmutils-dev")
-                for alt in libkf6kcmutils-dev libkf5kcmutils-dev libkcmutils6 libkcmutils-dev libkcmutils kcmutils-dev libkf6-kcmutils-dev libkf5-kcmutils-dev; do
+                ALTERNATIVES=(libkf5kcmutils-dev libkcmutils6 libkcmutils-dev libkcmutils kcmutils-dev libkf6-kcmutils-dev libkf5-kcmutils-dev)
+                for alt in "${ALTERNATIVES[@]}"; do
                     if dpkg -l | grep -qE "^ii.*$alt"; then
                         INSTALLED=true
                         INSTALLED_NAME="$alt"
                         break
                     fi
                 done
+                # If not installed, check what's available in repo
+                if [ "$INSTALLED" = false ]; then
+                    AVAILABLE_IN_REPO=$(find_alternative "$package" "${ALTERNATIVES[@]}")
+                fi
+                ;;
+            *)
+                # For other packages, just check if they exist in repo
+                if ! package_exists "$package"; then
+                    AVAILABLE_IN_REPO=""
+                fi
                 ;;
         esac
     fi
@@ -193,8 +245,17 @@ for package in "${REQUIRED_PACKAGES[@]}"; do
             echo "   ✅ $package"
         fi
     else
-        echo "   ❌ $package (not installed)"
-        MISSING_PACKAGES+=("$package")
+        if [ -n "$AVAILABLE_IN_REPO" ] && [ "$AVAILABLE_IN_REPO" != "$package" ]; then
+            echo "   ❌ $package (not installed, but alternative available: $AVAILABLE_IN_REPO)"
+            MISSING_PACKAGES+=("$AVAILABLE_IN_REPO")
+            AVAILABLE_ALTERNATIVES+=("$package → $AVAILABLE_IN_REPO")
+        elif package_exists "$package"; then
+            echo "   ❌ $package (not installed, but available in repository)"
+            MISSING_PACKAGES+=("$package")
+        else
+            echo "   ❌ $package (not installed, not found in repository)"
+            MISSING_PACKAGES+=("$package")
+        fi
     fi
 done
 echo ""
@@ -205,43 +266,46 @@ echo "  SUMMARY"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
-if [ "$PLASMA_INSTALLED" = false ] || [ -z "$QT_VERSION" ] || [ ${#MISSING_PACKAGES[@]} -gt 0 ] || [ ${#MISSING_MODULES[@]} -gt 0 ]; then
-    echo "⚠️  Some requirements are missing!"
-    echo ""
-    echo "Install missing packages with:"
-    echo "  sudo apt update"
-    if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
-        echo "  sudo apt install ${MISSING_PACKAGES[*]}"
-    fi
-    if [ ${#MISSING_MODULES[@]} -gt 0 ]; then
-        echo "  sudo apt install ${MISSING_MODULES[*]}"
-    fi
-    if [ "$PLASMA_INSTALLED" = false ]; then
-        echo "  sudo apt install kde-plasma-desktop"
-        echo "  # OR for minimal install:"
-        echo "  sudo apt install plasma-desktop plasma-workspace"
-    fi
-    if [ -z "$QT_VERSION" ]; then
-        echo "  sudo apt install qt6-base-dev"
-    fi
-    echo ""
-    echo "Note: On Ubuntu 25.04, package names may vary. Based on your system, try:"
-    echo "  sudo apt install libkf6plasma-dev kirigami2-dev libkf6kcmutils-dev"
-    echo "  # OR alternatives:"
-    echo "  sudo apt install libkf5plasma-dev libkirigami-dev libkf6kcmutils-dev"
-    echo "  # OR:"
-    echo "  sudo apt install libplasma6-dev libkirigami2-6 libkcmutils6"
-    echo ""
-    echo "To find exact package names on your system, run:"
-    echo "  apt search plasma-framework | grep -i dev"
-    echo "  apt search kirigami | grep -i dev"
-    echo "  apt search kcmutils | grep -i dev"
-    echo ""
-    read -p "Show available packages now? (y/N): " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        search_packages
-    fi
+    if [ "$PLASMA_INSTALLED" = false ] || [ -z "$QT_VERSION" ] || [ ${#MISSING_PACKAGES[@]} -gt 0 ] || [ ${#MISSING_MODULES[@]} -gt 0 ]; then
+        echo "⚠️  Some requirements are missing!"
+        echo ""
+        echo "Install missing packages with:"
+        echo "  sudo apt update"
+        if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
+            echo "  sudo apt install ${MISSING_PACKAGES[*]}"
+        fi
+        if [ ${#MISSING_MODULES[@]} -gt 0 ]; then
+            echo "  sudo apt install ${MISSING_MODULES[*]}"
+        fi
+        if [ "$PLASMA_INSTALLED" = false ]; then
+            echo "  sudo apt install kde-plasma-desktop"
+            echo "  # OR for minimal install:"
+            echo "  sudo apt install plasma-desktop plasma-workspace"
+        fi
+        if [ -z "$QT_VERSION" ]; then
+            echo "  sudo apt install qt6-base-dev"
+        fi
+        echo ""
+        if [ ${#AVAILABLE_ALTERNATIVES[@]} -gt 0 ]; then
+            echo "💡 Alternative packages found:"
+            for alt in "${AVAILABLE_ALTERNATIVES[@]}"; do
+                echo "   - $alt"
+            done
+            echo ""
+        fi
+        echo "Note: On Ubuntu 25.04, package names may vary. The script has"
+        echo "automatically detected available alternatives for your system."
+        echo ""
+        echo "To find exact package names on your system, run:"
+        echo "  apt search plasma-framework | grep -i dev"
+        echo "  apt search kirigami | grep -i dev"
+        echo "  apt search kcmutils | grep -i dev"
+        echo ""
+        read -p "Show available packages now? (y/N): " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            search_packages
+        fi
 else
     echo "✅ All requirements are met!"
     echo "   You can proceed with installation."
