@@ -7,53 +7,53 @@ PLUGIN_NAME="org.nextcloud.carousel"
 PLUGIN_DIR="$HOME/.local/share/plasma/wallpapers/${PLUGIN_NAME}"
 
 echo "═══════════════════════════════════════════════════════════"
-echo "  DISINSTALLAZIONE Nextcloud Carousel Plugin"
+echo "  UNINSTALL Nextcloud Carousel Plugin"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
 if [ ! -d "$PLUGIN_DIR" ]; then
-    echo "⚠️  Il plugin non sembra essere installato in:"
+    echo "⚠️  Plugin does not seem to be installed in:"
     echo "   $PLUGIN_DIR"
     echo ""
-    echo "Verifica manualmente se esiste in altre posizioni:"
+    echo "Manually verify if it exists in other locations:"
     echo "  - ~/.local/share/plasma/wallpapers/"
     echo "  - /usr/share/plasma/wallpapers/"
     exit 1
 fi
 
-echo "Plugin trovato in: $PLUGIN_DIR"
+echo "Plugin found in: $PLUGIN_DIR"
 echo ""
-read -p "Vuoi procedere con la disinstallazione? (s/N): " -n 1 -r
+read -p "Do you want to proceed with uninstallation? (y/N): " -n 1 -r
 echo ""
 
-if [[ ! $REPLY =~ ^[Ss]$ ]]; then
-    echo "Disinstallazione annullata."
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Uninstallation cancelled."
     exit 0
 fi
 
-echo "Rimozione del plugin..."
+echo "Removing plugin..."
 rm -rf "$PLUGIN_DIR"
 
 echo ""
-echo "✅ Plugin rimosso con successo!"
+echo "✅ Plugin removed successfully!"
 echo ""
 
-# Rimuovi anche i file di configurazione se esistono
+# Also remove configuration files if they exist
 CONFIG_FILE="$HOME/.config/plasmarc"
 if [ -f "$CONFIG_FILE" ]; then
-    echo "Verifica file di configurazione..."
+    echo "Checking configuration file..."
     if grep -q "org.nextcloud.carousel" "$CONFIG_FILE" 2>/dev/null; then
-        echo "⚠️  Trovate configurazioni nel file plasmarc"
-        echo "   Potresti voler rimuoverle manualmente da:"
+        echo "⚠️  Found configurations in plasmarc file"
+        echo "   You may want to remove them manually from:"
         echo "   $CONFIG_FILE"
     fi
 fi
 
 echo ""
-echo "Per completare la disinstallazione:"
-echo "  1. Riavvia plasmashell: killall plasmashell && plasmashell &"
-echo "  2. Oppure riavvia la sessione KDE"
+echo "To complete uninstallation:"
+echo "  1. Restart plasmashell: killall plasmashell && plasmashell &"
+echo "  2. Or restart KDE session"
 echo ""
-echo "Il plugin 'Carosello Nextcloud' non dovrebbe più apparire"
-echo "nella lista degli sfondi disponibili."
+echo "The 'Nextcloud Carousel' plugin should no longer appear"
+echo "in the list of available wallpapers."
 

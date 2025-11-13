@@ -1,0 +1,69 @@
+# Translation file for Nextcloud Carousel
+# Copyright (C) 2024 Nextcloud Carousel Developer
+# This file is distributed under the same license as the nextcloud-carousel package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: nextcloud-carousel\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-01 00:00+0000\n"
+"PO-Revision-Date: 2024-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Italian\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Nextcloud URL:"
+msgstr "URL Nextcloud:"
+
+msgid "https://nextcloud.example.com"
+msgstr "https://nextcloud.example.com"
+
+msgid "Username:"
+msgstr "Nome utente:"
+
+msgid "Your Nextcloud username"
+msgstr "Il tuo nome utente Nextcloud"
+
+msgid "Password:"
+msgstr "Password:"
+
+msgid "Password or app password"
+msgstr "Password o app password"
+
+msgid "Photo Path:"
+msgstr "Percorso foto:"
+
+msgid "/Photos"
+msgstr "/Photos"
+
+msgid "Slide Interval (seconds):"
+msgstr "Intervallo slide (secondi):"
+
+msgid "10"
+msgstr "10"
+
+msgid "Order Mode:"
+msgstr "Modalità ordine:"
+
+msgid "Sequential"
+msgstr "Sequenziale"
+
+msgid "Random (each time)"
+msgstr "Casuale (ogni volta)"
+
+msgid "Shuffle Once"
+msgstr "Mescola una volta"
+
+msgid "Smart Random (avoid repeats)"
+msgstr "Casuale intelligente (evita ripetizioni)"
+
+msgid "Background Color:"
+msgstr "Colore sfondo:"
+
+msgid "Select Background Color"
+msgstr "Seleziona colore sfondo"
+
