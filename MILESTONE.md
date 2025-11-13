@@ -306,23 +306,25 @@ To implement actual image transitions, the following is required:
   - TextField with IntValidator for input validation
   - Range: 100-10000ms (default: 1000ms)
   - Controls blur opacity animation duration
-  - Note: Does not control image transitions (not yet implemented)
+  - Note: Now controls all transition durations (Fade, Slide, Zoom)
 
 **TransitionType (UI Implementation)**
 - **Started:** 2024-11-13
 - **Completed:** 2024-11-13
-- **Status:** ✅ UI COMPLETE - Backend partially implemented (Fade working)
+- **Status:** ✅ COMPLETE - All transitions (Fade, Slide, Zoom) fully implemented
 - **Implementation:**
   - ✅ ComboBox added to config.qml (3 options: Fade, Slide, Zoom)
   - ✅ Translation strings added (EN/IT)
   - ✅ Property alias cfg_TransitionType configured
-  - ✅ Backend: Fade transition implemented and working
+  - ✅ Backend: All transitions (Fade, Slide, Zoom) implemented and working
 - **Technical details:**
   - ComboBox with 3 transition type options
   - Default: 0 (Fade)
   - Options: 0=Fade, 1=Slide, 2=Zoom
-  - Fade transition working using StackView with OpacityAnimator (KDE official pattern)
-  - Slide and Zoom transitions pending (will use different approach than conditional animators)
+  - All transitions working using StackView with ParallelAnimation (KDE official pattern)
+  - Fade: OpacityAnimator
+  - Slide: PropertyAnimation on x property
+  - Zoom: PropertyAnimation on scale property
 
 **Transition System Implementation (StackView - KDE Official Pattern)**
 - **Started:** 2024-11-13
@@ -418,23 +420,26 @@ The transition system has been successfully implemented using the KDE official S
 - ✅ `TransitionEnabled` setting to enable/disable transitions
 - ✅ `TransitionRandom` setting to randomize transition type
 
-### The Problem
+### ✅ Transition System - FULLY IMPLEMENTED
 
-Currently, when an image changes:
+The transition system has been successfully implemented. When an image changes:
 1. Timer triggers → `nextPhoto()` is called
 2. New image is downloaded via `loadImageWithAuth()`
 3. Image is converted to base64 data URL
-4. **`imageView.source = dataUrl`** ← **INSTANT CHANGE, NO ANIMATION**
-5. Image appears immediately
+4. **Transition type determined** (random or fixed based on settings)
+5. **ImageComponent created** with initial position/scale based on transition type
+6. **StackView.replace()** called with transition animation
+7. **Smooth transition** (Fade/Slide/Zoom) displays the new image
 
-**What's in the code but NOT USED:**
-- ✅ `StackView` is now used with replace() method
+**What's implemented:**
+- ✅ `StackView` is used with replace() method
 - ✅ `ImageComponent.qml` created and used for image display
 - ✅ `TransitionType` setting is read and used (all types working: Fade, Slide, Zoom)
 - ✅ `TransitionEnabled` setting to control transitions on/off
 - ✅ `TransitionRandom` setting to randomize transition type per image
+- ✅ All three transition types fully functional
 
-### Solution: Implement Transition System
+### Implementation Details (Reference)
 
 **📚 Official Documentation Analysis:**
 
@@ -448,10 +453,10 @@ After consulting the official KDE Plasma slideshow plugin (`org.kde.slideshow`) 
    - Keeps old image visible until new image is fully faded in (prevents background showing through)
 
 2. **Qt/QML Official Recommendations:**
-   - Dual Image approach with opacity animation is recommended for smooth transitions
-   - `States` + `Transitions` can be used but is more complex
+   - StackView approach with ParallelAnimation is implemented and working for smooth transitions
+   - `States` + `Transitions` can be used but is more complex (not used)
    - `Behavior on source` doesn't work well for images (source changes instantly)
-   - `OpacityAnimator` is preferred over `NumberAnimation` for opacity (better performance)
+   - `OpacityAnimator` is preferred over `NumberAnimation` for opacity (better performance) - ✅ Used
 
 3. **Key Pattern from KDE Plugin:**
    ```qml
@@ -479,9 +484,11 @@ After consulting the official KDE Plasma slideshow plugin (`org.kde.slideshow`) 
 
 To make transitions work, we need to **replace the direct image loading** with a **transition system**. There are two main approaches:
 
-#### **Option 1: Dual Image Layers (Simpler, Qt Recommended)**
+#### **Option 1: Dual Image Layers (Simpler, Qt Recommended) - NOT CHOSEN**
 
-**How it works:**
+**Note:** This option was considered but not implemented. Option 2 (StackView) was chosen instead.
+
+**How it would work:**
 - Two `Image` components: `currentImage` and `nextImage`
 - When changing image:
   1. Load new image into `nextImage` (hidden, opacity=0)
@@ -492,21 +499,11 @@ To make transitions work, we need to **replace the direct image loading** with a
   3. After animation completes, swap: `currentImage = nextImage`, clear `nextImage`
   4. Repeat for next change
 
-**Implementation steps:**
-1. Replace single `Image` component with two `Image` components
-2. Modify `loadImageWithAuth()` to load into `nextImage` instead of `imageView`
-3. Add transition logic based on `root.configuration.TransitionType`:
-   - Read `TransitionType` (0=Fade, 1=Slide, 2=Zoom)
-   - Apply appropriate animations using `NumberAnimation` or `ParallelAnimation`
-   - Use `TransitionDuration` for animation duration
-4. Add completion handler to swap images after animation
-5. Handle edge cases (first image, errors, etc.)
-
 **Complexity:** Medium
 **Estimated effort:** 2-3 hours
-**Files to modify:** `nextcloud-carousel/contents/ui/main.qml`
+**Status:** Not implemented (Option 2 chosen instead)
 
-#### **Option 2: StackView System (KDE Official Pattern - Recommended)**
+#### **Option 2: StackView System (KDE Official Pattern - ✅ CHOSEN AND IMPLEMENTED)**
 
 **How it works (based on official KDE slideshow plugin):**
 - Use `StackView` with `replace()` method (not push/pop)
@@ -516,49 +513,52 @@ To make transitions work, we need to **replace the direct image loading** with a
 - Configure `replaceEnter` and `replaceExit` transitions
 - Support different transition types (Fade/Slide/Zoom) via transition configuration
 
-**Implementation steps (following KDE pattern):**
-1. Fix existing `StackView` (lines 374-397) - currently defined but not used correctly
-2. Create `ImageComponent.qml` for individual images (similar to KDE's `StaticImageComponent.qml`)
-3. Modify `loadImageWithAuth()` to:
+**Implementation steps (following KDE pattern) - ✅ COMPLETED:**
+1. ✅ Fixed existing `StackView` - now properly used with replace() method
+2. ✅ Created `ImageComponent.qml` for individual images (similar to KDE's `StaticImageComponent.qml`)
+3. ✅ Modified `loadImageWithAuth()` to:
    - Create `pendingImage` component in background
    - Connect to `statusChanged` signal
    - Call `replaceWhenLoaded()` when ready
-4. Implement `replaceWhenLoaded()` function:
+   - Determine transition type (random or fixed)
+   - Set initial position/scale based on transition type
+4. ✅ Implemented `replaceWhenLoaded()` function:
    - Disconnect `statusChanged` signal
    - Call `view.replace(pendingImage, {}, QQC2.StackView.Transition)`
    - Clean up old image via `onDeactivated` and `onRemoved` signals
-5. Configure transitions based on `TransitionType`:
+5. ✅ Configured transitions based on `TransitionType`:
    - Fade: `OpacityAnimator` in `replaceEnter`, `PauseAnimation` in `replaceExit`
-   - Slide: `XAnimator` or `YAnimator` for horizontal/vertical movement
-   - Zoom: `ScaleAnimator` for zoom effect
-6. Use `TransitionDuration` setting for animation duration
-7. Handle edge cases (first image, errors, rapid changes)
+   - Slide: `PropertyAnimation` on x property for horizontal movement
+   - Zoom: `PropertyAnimation` on scale property for zoom effect
+6. ✅ Use `TransitionDuration` setting for animation duration
+7. ✅ Handle edge cases (first image, errors, rapid changes)
+8. ✅ Added `TransitionEnabled` to enable/disable transitions
+9. ✅ Added `TransitionRandom` to randomize transition type per image
 
 **Complexity:** Medium-High
 **Estimated effort:** 3-4 hours
-**Files to modify:** `nextcloud-carousel/contents/ui/main.qml`, create `ImageComponent.qml`
+**Status:** ✅ COMPLETED
+**Files modified:** `nextcloud-carousel/contents/ui/main.qml`, created `ImageComponent.qml`
 **Advantages:**
 - ✅ Follows official KDE pattern (proven, tested)
 - ✅ Better memory management (automatic cleanup via StackView)
 - ✅ Supports complex transitions (can combine multiple animators)
-- ✅ Already have StackView defined (just need to fix it)
+- ✅ StackView properly implemented and working
 
-### Recommended Approach
+### ✅ Implementation Completed
 
-**Choose Option 2 (StackView System - KDE Official Pattern)** because:
+**Option 2 (StackView System - KDE Official Pattern) was chosen and implemented:**
 - ✅ **Follows official KDE Plasma pattern** (used in `org.kde.slideshow`)
 - ✅ **Proven and tested** in production KDE codebase
 - ✅ **Better memory management** (automatic cleanup via StackView signals)
 - ✅ **Supports complex transitions** (can combine multiple animators for Slide/Zoom)
-- ✅ **StackView already defined** in our code (just needs to be fixed/used correctly)
+- ✅ **StackView properly implemented** and working correctly
 - ✅ **Consistent with KDE ecosystem** (easier for future maintainers)
 - ✅ **Handles edge cases** (rapid changes, errors) via built-in StackView mechanisms
 
-**Note:** Option 1 (Dual Image Layers) is simpler and also valid (Qt recommended), but Option 2 aligns better with KDE Plasma standards and our existing code structure.
+### ✅ Detailed Implementation (Completed - Reference)
 
-### Detailed Implementation Plan (Option 2: StackView - KDE Official Pattern)
-
-**Step 1: Create ImageComponent.qml**
+**✅ Step 1: Create ImageComponent.qml (COMPLETED)**
 ```qml
 // nextcloud-carousel/contents/ui/ImageComponent.qml
 import QtQuick
@@ -595,19 +595,21 @@ QQC2.StackView {
 }
 ```
 
-**Step 2: Fix StackView in main.qml**
-- Remove unused `Image` component (lines 400-443)
-- Fix `StackView` configuration (lines 374-397)
-- Add `pendingImage` property
-- Add `loadImage()` and `replaceWhenLoaded()` functions
+**✅ Step 2: Fix StackView in main.qml (COMPLETED)**
+- ✅ Removed unused `Image` component
+- ✅ Fixed `StackView` configuration
+- ✅ Added `pendingImage` property
+- ✅ Added `replaceWhenLoaded()` function
 
-**Step 3: Modify loadImageWithAuth()**
-- Instead of `imageView.source = dataUrl`
-- Create `pendingImage` component using `ImageComponent.qml`
-- Connect to `pendingImage.statusChanged` signal
-- Call `replaceWhenLoaded()` when image is ready
+**✅ Step 3: Modify loadImageWithAuth() (COMPLETED)**
+- ✅ Instead of `imageView.source = dataUrl`
+- ✅ Create `pendingImage` component using `ImageComponent.qml`
+- ✅ Connect to `pendingImage.statusChanged` signal
+- ✅ Call `replaceWhenLoaded()` when image is ready
+- ✅ Determine transition type (random or fixed)
+- ✅ Set initial position/scale based on transition type
 
-**Step 4: Implement replaceWhenLoaded() function**
+**✅ Step 4: Implement replaceWhenLoaded() function (COMPLETED)**
 ```qml
 function replaceWhenLoaded() {
     if (pendingImage.status === Image.Loading) {
@@ -628,7 +630,7 @@ function replaceWhenLoaded() {
 }
 ```
 
-**Step 5: Configure StackView transitions based on TransitionType**
+**✅ Step 5: Configure StackView transitions based on TransitionType (COMPLETED)**
 ```qml
 QQC2.StackView {
     id: imageStack
@@ -724,13 +726,19 @@ If implementing transitions is too complex right now, we can focus on:
    - Live preview of settings changes
    - Preview transition types before applying
 
-### Decision Needed
+### ✅ Decision Made and Implemented
 
-**Which approach do you prefer?**
-- **A)** Implement transition system (Option 1: Dual Image Layers) - **RECOMMENDED**
-- **B)** Implement transition system (Option 2: StackView)
-- **C)** Focus on simpler improvements first (validation, performance, preview)
-- **D)** Something else?
+**Transition system implementation:**
+- ✅ **Option 2 (StackView System) was chosen and fully implemented**
+- ✅ All three transition types (Fade, Slide, Zoom) working
+- ✅ Transition enable/disable control added
+- ✅ Transition randomization added
+
+**Next priorities:**
+- **A)** Optimize performance (preload, cache, optimize WebDAV requests)
+- **B)** Add settings preview (live preview of settings changes)
+- **C)** Add photo information display (EXIF data, filename, path, date/time)
+- **D)** Add automatic orientation detection
 
 ## 🔮 Planned Features
 
