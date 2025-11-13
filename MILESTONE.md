@@ -124,13 +124,18 @@ The following settings are implemented in the backend (`main.qml`) but are not y
 
 2. **TransitionType** - Transition type (Fade/Slide/Zoom)
    - **Complexity:** Medium - Requires implementing actual transitions
-   - **Current behavior:** NOT IMPLEMENTED - Only direct image change without animation
+   - **Status:** ✅ UI COMPLETE - Backend NOT IMPLEMENTED
+   - **UI Implementation:**
+     - ✅ ComboBox added to config.qml (3 options: Fade, Slide, Zoom)
+     - ✅ Translation strings added (EN/IT)
+     - ✅ Property alias cfg_TransitionType configured
+   - **Backend Status:** NOT IMPLEMENTED - Only direct image change without animation
    - **Current state:**
      - StackView is defined with pushEnter/pushExit transitions but NOT USED
      - Images are loaded directly into Image component, changing source instantly
      - Only opacity fade exists (for blur effect, not for transitions)
      - Slide and Zoom transitions are not implemented
-   - **What needs to be done:**
+   - **What needs to be done (Backend):**
      - Implement proper transition system using StackView or multiple Image layers
      - Add Fade transition (opacity 0→1)
      - Add Slide transition (horizontal/vertical movement)
@@ -308,13 +313,26 @@ To implement actual image transitions, the following is required:
   - Controls blur opacity animation duration
   - Note: Does not control image transitions (not yet implemented)
 
+**TransitionType (UI Implementation)**
+- **Started:** 2024-11-13
+- **Completed:** 2024-11-13
+- **Status:** ✅ UI COMPLETE - Backend NOT IMPLEMENTED
+- **Implementation:**
+  - ✅ ComboBox added to config.qml (3 options: Fade, Slide, Zoom)
+  - ✅ Translation strings added (EN/IT)
+  - ✅ Property alias cfg_TransitionType configured
+- **Technical details:**
+  - ComboBox with 3 transition type options
+  - Default: 0 (Fade)
+  - Options: 0=Fade, 1=Slide, 2=Zoom
+  - Note: Backend transition system not yet implemented - setting is saved but not used
+
 ## 📝 Next Steps
 
 1. ✅ Add Blur setting to configuration interface (COMPLETE)
 2. ✅ Add FillMode and ImageScale to configuration interface (COMPLETE)
 3. ✅ Add TransitionDuration to configuration interface (COMPLETE)
-4. Add remaining missing settings to the configuration interface:
-   - TransitionType (requires full transition system implementation)
+4. ✅ Add TransitionType to configuration interface (UI COMPLETE - Backend pending)
 5. Improve validation and user feedback
 6. Add settings preview
 7. Optimize performance for large photo collections

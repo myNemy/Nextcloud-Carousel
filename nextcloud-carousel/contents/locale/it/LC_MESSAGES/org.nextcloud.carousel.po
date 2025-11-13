@@ -52,6 +52,18 @@ msgstr "Durata transizione (ms):"
 msgid "1000"
 msgstr "1000"
 
+msgid "Transition Type:"
+msgstr "Tipo transizione:"
+
+msgid "Fade"
+msgstr "Dissolvenza"
+
+msgid "Slide"
+msgstr "Scorrimento"
+
+msgid "Zoom"
+msgstr "Zoom"
+
 msgid "Order Mode:"
 msgstr "Modalità ordine:"
 

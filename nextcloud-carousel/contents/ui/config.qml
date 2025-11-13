@@ -18,6 +18,7 @@ Kirigami.FormLayout {
     property alias cfg_PhotoPath: photoPathField.text
     property alias cfg_SlideInterval: slideIntervalField.text
     property alias cfg_TransitionDuration: transitionDurationField.text
+    property alias cfg_TransitionType: transitionTypeComboBox.currentIndex
     property alias cfg_RandomOrder: randomOrderComboBox.currentIndex
     property alias cfg_Blur: blurCheckBox.checked
     property alias cfg_BlurOpacity: blurOpacitySlider.value
@@ -65,6 +66,17 @@ Kirigami.FormLayout {
             bottom: 100
             top: 10000
         }
+    }
+
+    QtControls2.ComboBox {
+        id: transitionTypeComboBox
+        Kirigami.FormData.label: i18n("Transition Type:")
+        model: [
+            i18n("Fade"),
+            i18n("Slide"),
+            i18n("Zoom")
+        ]
+        currentIndex: wallpaper.configuration.TransitionType || 0
     }
 
     QtControls2.ComboBox {
