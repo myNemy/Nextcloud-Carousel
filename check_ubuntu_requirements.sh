@@ -66,14 +66,14 @@ echo "🔍 Checking KDE Frameworks 6:"
 KF6_VERSION=$(pkg-config --modversion KF6Plasma 2>/dev/null)
 if [ -n "$KF6_VERSION" ]; then
     echo "   ✅ KF6 found via pkg-config: $KF6_VERSION"
-elif dpkg -l | grep -qE "^ii.*libplasma|^ii.*libkirigami|^ii.*libkcmutils|^ii.*plasma-framework|^ii.*kirigami"; then
+elif dpkg -l | grep -qE "^ii.*libplasma|^ii.*libkirigami|^ii.*libkcmutils|^ii.*plasma-framework|^ii.*kirigami|^ii.*libkf[56].*plasma|^ii.*libkf[56].*kirigami|^ii.*libkf[56].*kcmutils"; then
     echo "   ✅ KF6 packages found (Ubuntu naming)"
-    INSTALLED_KF6=$(dpkg -l | grep -E "^ii.*(libplasma|libkirigami|libkcmutils|plasma-framework|kirigami)" | head -3 | awk '{print $2}' | tr '\n' ' ')
+    INSTALLED_KF6=$(dpkg -l | grep -E "^ii.*(libplasma|libkirigami|libkcmutils|plasma-framework|kirigami|libkf[56].*plasma|libkf[56].*kirigami|libkf[56].*kcmutils)" | head -5 | awk '{print $2}' | tr '\n' ' ')
     echo "   💡 Found packages: $INSTALLED_KF6"
 else
     echo "   ❌ KF6 packages not found"
-    echo "   💡 Try installing: sudo apt install libplasma6-dev libkirigami2-6 libkcmutils6"
-    echo "   💡 Or alternatives: sudo apt install libplasma-dev libkirigami-dev libkcmutils-dev"
+    echo "   💡 Try installing: sudo apt install libkf6plasma-dev libkf6kirigami2-dev libkf6kcmutils-dev"
+    echo "   💡 Or alternatives: sudo apt install libkf5plasma-dev kirigami2-dev libkf6kcmutils-dev"
 fi
 echo ""
 
@@ -101,9 +101,9 @@ echo ""
 echo "🔍 Checking required packages:"
 REQUIRED_PACKAGES=(
     "qt6-base-dev"
-    "libplasma6-dev"
-    "libkirigami2-6"
-    "libkcmutils6"
+    "libkf6plasma-dev"
+    "kirigami2-dev"
+    "libkf6kcmutils-dev"
     "cmake"
 )
 
@@ -128,8 +128,8 @@ for package in "${REQUIRED_PACKAGES[@]}"; do
     else
         # Try alternative names based on package
         case "$package" in
-            "libplasma6-dev")
-                for alt in libplasma-dev libplasma6 plasma-framework-dev libkf6plasma-dev; do
+            "libkf6plasma-dev")
+                for alt in libkf5plasma-dev libplasma6-dev libplasma-dev libplasma6 plasma-framework-dev libkf6-plasma-dev; do
                     if dpkg -l | grep -qE "^ii.*$alt"; then
                         INSTALLED=true
                         INSTALLED_NAME="$alt"
@@ -137,8 +137,8 @@ for package in "${REQUIRED_PACKAGES[@]}"; do
                     fi
                 done
                 ;;
-            "libkirigami2-6")
-                for alt in libkirigami-dev libkirigami2 kirigami2-dev libkf6kirigami2-dev; do
+            "kirigami2-dev")
+                for alt in libkirigami-dev libkf5kirigami2-5 libkirigami2 libkf6kirigami2-dev libkf6-kirigami-dev libkf5-kirigami-dev libkirigami2-6; do
                     if dpkg -l | grep -qE "^ii.*$alt"; then
                         INSTALLED=true
                         INSTALLED_NAME="$alt"
@@ -146,8 +146,8 @@ for package in "${REQUIRED_PACKAGES[@]}"; do
                     fi
                 done
                 ;;
-            "libkcmutils6")
-                for alt in libkcmutils-dev libkcmutils kcmutils-dev libkf6kcmutils-dev; do
+            "libkf6kcmutils-dev")
+                for alt in libkf5kcmutils-dev libkcmutils6 libkcmutils-dev libkcmutils kcmutils-dev libkf6-kcmutils-dev libkf5-kcmutils-dev; do
                     if dpkg -l | grep -qE "^ii.*$alt"; then
                         INSTALLED=true
                         INSTALLED_NAME="$alt"
@@ -197,10 +197,12 @@ if [ -z "$PLASMA_VERSION" ] || [ -z "$QT_VERSION" ] || [ ${#MISSING_PACKAGES[@]}
         echo "  sudo apt install qt6-base-dev"
     fi
     echo ""
-    echo "Note: On Ubuntu 25.04, package names may vary. Try:"
-    echo "  sudo apt install libplasma6-dev libkirigami2-6 libkcmutils6"
+    echo "Note: On Ubuntu 25.04, package names may vary. Based on your system, try:"
+    echo "  sudo apt install libkf6plasma-dev kirigami2-dev libkf6kcmutils-dev"
     echo "  # OR alternatives:"
-    echo "  sudo apt install libplasma-dev libkirigami-dev libkcmutils-dev"
+    echo "  sudo apt install libkf5plasma-dev libkirigami-dev libkf6kcmutils-dev"
+    echo "  # OR:"
+    echo "  sudo apt install libplasma6-dev libkirigami2-6 libkcmutils6"
     echo ""
     echo "To find exact package names on your system, run:"
     echo "  apt search plasma-framework | grep -i dev"

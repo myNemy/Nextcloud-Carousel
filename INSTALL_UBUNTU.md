@@ -34,7 +34,7 @@ apt search kirigami | grep -i dev
 apt search kcmutils | grep -i dev
 ```
 
-**Then install the packages (try these names):**
+**Then install the packages. Based on Ubuntu 25.04, try these names:**
 
 ```bash
 sudo apt update
@@ -42,10 +42,10 @@ sudo apt install \
     qt6-base-dev \
     qt6-declarative-dev \
     qt6-tools-dev \
-    libplasma6-dev \
-    libkirigami2-6 \
-    libkcmutils6 \
-    libkconfig6 \
+    libkf6plasma-dev \
+    kirigami2-dev \
+    libkf6kcmutils-dev \
+    libkf6config-dev \
     qml6-module-org-kde-kirigami \
     qml6-module-org-kde-kcmutils \
     qml6-module-org-kde-plasma \
@@ -59,10 +59,26 @@ sudo apt install \
 ```bash
 sudo apt install \
     qt6-base-dev \
-    libplasma-dev \
+    libkf5plasma-dev \
     libkirigami-dev \
-    libkcmutils-dev \
-    libkconfig-dev \
+    libkf6kcmutils-dev \
+    libkf6config-dev \
+    qml6-module-org-kde-kirigami \
+    qml6-module-org-kde-kcmutils \
+    qml6-module-org-kde-plasma \
+    qml6-module-org-kde-kquickcontrols \
+    cmake \
+    build-essential
+```
+
+**Or try simplified names:**
+
+```bash
+sudo apt install \
+    qt6-base-dev \
+    libplasma6-dev \
+    libkirigami2-6 \
+    libkcmutils6 \
     qml6-module-org-kde-kirigami \
     qml6-module-org-kde-kcmutils \
     qml6-module-org-kde-plasma \
@@ -72,10 +88,9 @@ sudo apt install \
 ```
 
 **Note:** Package names on Ubuntu 25.04 may vary. Common variants:
-- `libplasma6-dev` or `libplasma-dev` or `plasma-framework-dev`
-- `libkirigami2-6` or `libkirigami-dev` or `kirigami2-dev`
-- `libkcmutils6` or `libkcmutils-dev` or `kcmutils-dev`
-- `libkconfig6` or `libkconfig-dev`
+- `libkf6plasma-dev` or `libkf5plasma-dev` or `libplasma6-dev` or `libplasma-dev`
+- `kirigami2-dev` or `libkirigami-dev` or `libkf5kirigami2-5` or `libkirigami2-6`
+- `libkf6kcmutils-dev` or `libkf5kcmutils-dev` or `libkcmutils6` or `libkcmutils-dev`
 
 ### 3. Verify Versions
 
