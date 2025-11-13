@@ -124,7 +124,7 @@ The following settings are implemented in the backend (`main.qml`) but are not y
 
 2. **TransitionType** - Transition type (Fade/Slide/Zoom)
    - **Complexity:** Medium - Requires implementing actual transitions
-   - **Status:** ✅ UI COMPLETE - Backend NOT IMPLEMENTED
+   - **Status:** ✅ COMPLETE - Fully implemented (UI + Backend)
    - **UI Implementation:**
      - ✅ ComboBox added to config.qml (3 options: Fade, Slide, Zoom)
      - ✅ Translation strings added (EN/IT)
@@ -327,13 +327,36 @@ To implement actual image transitions, the following is required:
   - Options: 0=Fade, 1=Slide, 2=Zoom
   - Note: Backend transition system not yet implemented - setting is saved but not used
 
+**Transition System (Backend Implementation)**
+- **Started:** 2024-11-13
+- **Completed:** 2024-11-13
+- **Status:** ✅ COMPLETE - Fully implemented following KDE official pattern
+- **Implementation:**
+  - ✅ Created `ImageComponent.qml` for individual images
+  - ✅ Implemented `pendingImage` pattern (load in background before replacing)
+  - ✅ Fixed StackView to use `replace()` method with transitions
+  - ✅ Configured `replaceEnter` and `replaceExit` transitions
+  - ✅ Added Fade transition (OpacityAnimator)
+  - ✅ Added Slide transition (XAnimator for horizontal movement)
+  - ✅ Added Zoom transition (ScaleAnimator)
+  - ✅ Added handlers for `onTransitionTypeChanged()` and `onTransitionDurationChanged()`
+  - ✅ Removed direct Image component, now using StackView exclusively
+- **Technical details:**
+  - Follows official KDE slideshow plugin pattern (`org.kde.slideshow`)
+  - Uses `QQC2.StackView.replace()` instead of push/pop
+  - Transitions use `OpacityAnimator`, `XAnimator`, `ScaleAnimator` (better performance than NumberAnimation)
+  - `pendingImage` loads in background, replaces when ready
+  - Automatic cleanup via `onDeactivated` and `onRemoved` signals
+  - First image skips animation (`doesSkipAnimation` flag)
+  - All transition types respect `TransitionDuration` setting
+
 ## 📝 Next Steps
 
 1. ✅ Add Blur setting to configuration interface (COMPLETE)
 2. ✅ Add FillMode and ImageScale to configuration interface (COMPLETE)
 3. ✅ Add TransitionDuration to configuration interface (COMPLETE)
-4. ✅ Add TransitionType to configuration interface (UI COMPLETE - Backend pending)
-5. **🔴 PRIORITY: Implement transition system in backend** (see detailed explanation below)
+4. ✅ Add TransitionType to configuration interface (COMPLETE)
+5. ✅ **Implement transition system in backend** (COMPLETE - KDE official pattern)
 6. Improve validation and user feedback
 7. Add settings preview
 8. Optimize performance for large photo collections
