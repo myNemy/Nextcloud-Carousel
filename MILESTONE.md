@@ -129,18 +129,14 @@ The following settings are implemented in the backend (`main.qml`) but are not y
      - ✅ ComboBox added to config.qml (3 options: Fade, Slide, Zoom)
      - ✅ Translation strings added (EN/IT)
      - ✅ Property alias cfg_TransitionType configured
-   - **Backend Status:** NOT IMPLEMENTED - Only direct image change without animation
+   - **Backend Status:** ✅ IMPLEMENTED - Full transition system using KDE official pattern
    - **Current state:**
-     - StackView is defined with pushEnter/pushExit transitions but NOT USED
-     - Images are loaded directly into Image component, changing source instantly
-     - Only opacity fade exists (for blur effect, not for transitions)
-     - Slide and Zoom transitions are not implemented
-   - **What needs to be done (Backend):**
-     - Implement proper transition system using StackView or multiple Image layers
-     - Add Fade transition (opacity 0→1)
-     - Add Slide transition (horizontal/vertical movement)
-     - Add Zoom transition (scale animation)
-     - Apply transition based on TransitionType setting
+     - ✅ StackView configured with `replace()` method and transitions
+     - ✅ Images loaded via `pendingImage` pattern (background loading)
+     - ✅ Fade transition implemented (OpacityAnimator)
+     - ✅ Slide transition implemented (XAnimator)
+     - ✅ Zoom transition implemented (ScaleAnimator)
+     - ✅ Transitions respect TransitionType and TransitionDuration settings
 
 3. **Blur** - Enable/disable blur effect with adjustable opacity
    - **Complexity:** Low-Medium - Checkbox + Slider
