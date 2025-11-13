@@ -51,7 +51,11 @@ fi
 
 echo ""
 echo "To complete uninstallation:"
-echo "  1. Restart plasmashell: killall plasmashell && plasmashell &"
+if command -v kstart >/dev/null 2>&1; then
+    echo "  1. Restart plasmashell: killall plasmashell && kstart plasmashell"
+else
+    echo "  1. Restart plasmashell: killall plasmashell && plasmashell --replace &"
+fi
 echo "  2. Or restart KDE session"
 echo ""
 echo "The 'Nextcloud Carousel' plugin should no longer appear"

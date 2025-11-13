@@ -37,5 +37,12 @@ echo "For complete details, see: README.md"
 echo ""
 echo "═══════════════════════════════════════════════════════════"
 echo ""
+echo "⚠️  IMPORTANT: Restart plasmashell to load the plugin:"
+if command -v kstart >/dev/null 2>&1; then
+    echo "   killall plasmashell && kstart plasmashell"
+else
+    echo "   killall plasmashell && plasmashell --replace &"
+fi
+echo ""
 echo "To uninstall: rm -rf $PLUGIN_DIR"
 

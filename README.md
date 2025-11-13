@@ -21,7 +21,7 @@ A wallpaper plugin for KDE Plasma 6 that creates a photo carousel from your Next
 ```bash
 mkdir -p ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
 cp -r nextcloud-carousel/* ~/.local/share/plasma/wallpapers/org.nextcloud.carousel/
-killall plasmashell && plasmashell &
+killall plasmashell && kstart plasmashell
 ```
 
 ## Configuration
@@ -70,13 +70,14 @@ killall plasmashell && plasmashell &
 Or manually:
 ```bash
 rm -rf ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
-killall plasmashell && plasmashell &
+killall plasmashell && kstart plasmashell
 ```
 
 ## Troubleshooting
 
 **Plugin doesn't appear:**
-- Restart plasmashell: `killall plasmashell && plasmashell &`
+- Restart plasmashell: `killall plasmashell && kstart plasmashell`
+- Or use: `killall plasmashell && plasmashell --replace &`
 
 **"Configure" button doesn't appear:**
 - Apply the wallpaper first, then reopen configuration
@@ -90,7 +91,7 @@ killall plasmashell && plasmashell &
 ```bash
 rm -rf ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
 ./install.sh
-killall plasmashell && plasmashell &
+killall plasmashell && kstart plasmashell
 ```
 
 ## Important Notes

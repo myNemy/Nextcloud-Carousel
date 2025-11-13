@@ -128,7 +128,7 @@ chmod +x install.sh
 ./install.sh
 
 # Restart plasmashell
-killall plasmashell && plasmashell &
+killall plasmashell && kstart plasmashell
 ```
 
 ### Method 2: Manual Installation
@@ -141,7 +141,7 @@ mkdir -p ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
 cp -r nextcloud-carousel/* ~/.local/share/plasma/wallpapers/org.nextcloud.carousel/
 
 # Restart plasmashell
-killall plasmashell && plasmashell &
+killall plasmashell && kstart plasmashell
 ```
 
 ### Method 3: System-wide Installation (with CMake)
@@ -160,7 +160,7 @@ make
 sudo make install
 
 # Restart plasmashell
-killall plasmashell && plasmashell &
+killall plasmashell && kstart plasmashell
 ```
 
 ## Verification
@@ -199,7 +199,7 @@ ls -la ~/.local/share/plasma/wallpapers/org.nextcloud.carousel/contents/ui/
 
 2. **Restart plasmashell:**
    ```bash
-   killall plasmashell && plasmashell &
+   killall plasmashell && kstart plasmashell
    ```
 
 3. **Check for errors:**
@@ -240,7 +240,7 @@ chmod -R 755 ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
 rm -rf ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
 
 # Restart plasmashell
-killall plasmashell && plasmashell &
+killall plasmashell && kstart plasmashell
 ```
 
 Or use the uninstall script:

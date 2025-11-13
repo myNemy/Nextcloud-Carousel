@@ -46,15 +46,20 @@ if pgrep -x plasmashell > /dev/null; then
     sleep 2
 fi
 
-echo "   Avviando plasmashell..."
-plasmashell > /dev/null 2>&1 &
+echo "   Avviando plasmashell con kstart..."
+if command -v kstart >/dev/null 2>&1; then
+    kstart plasmashell > /dev/null 2>&1
+else
+    # Fallback to plasmashell --replace if kstart not available
+    plasmashell --replace > /dev/null 2>&1 &
+fi
 sleep 3
 
 if pgrep -x plasmashell > /dev/null; then
     echo "   ✅ plasmashell riavviato"
 else
     echo "   ⚠️  plasmashell potrebbe non essere avviato correttamente"
-    echo "   Prova manualmente: killall plasmashell && plasmashell &"
+    echo "   Prova manualmente: killall plasmashell && kstart plasmashell"
 fi
 echo ""
 
