@@ -46,50 +46,85 @@ else
 fi
 echo ""
 
-# Check KF6
+# Check KF6 (via packages on Ubuntu)
 echo "🔍 Checking KDE Frameworks 6:"
 KF6_VERSION=$(pkg-config --modversion KF6Plasma 2>/dev/null)
 if [ -n "$KF6_VERSION" ]; then
-    echo "   ✅ KF6 found: $KF6_VERSION"
+    echo "   ✅ KF6 found via pkg-config: $KF6_VERSION"
+elif dpkg -l | grep -qE "^ii.*libplasma|^ii.*libkirigami|^ii.*libkcmutils"; then
+    echo "   ✅ KF6 packages found (Ubuntu naming)"
+    echo "   💡 Note: Ubuntu uses different package names (libplasma-dev, libkirigami-dev, etc.)"
 else
-    echo "   ❌ KF6 not found"
-    echo "   💡 Install with: sudo apt install libkf6plasma-dev"
+    echo "   ❌ KF6 packages not found"
+    echo "   💡 Install with: sudo apt install libplasma-dev libkirigami-dev libkcmutils-dev"
 fi
 echo ""
 
-# Check QML modules
-echo "🔍 Checking QML modules:"
-QML_MODULES=(
-    "org.kde.kirigami"
-    "org.kde.kcmutils"
-    "org.kde.plasma.core"
-    "org.kde.kquickcontrols"
+# Check QML modules (check via package names instead)
+echo "🔍 Checking QML modules (via packages):"
+QML_PACKAGES=(
+    "qml6-module-org-kde-kirigami"
+    "qml6-module-org-kde-kcmutils"
+    "qml6-module-org-kde-plasma"
+    "qml6-module-org-kde-kquickcontrols"
 )
 
 MISSING_MODULES=()
-for module in "${QML_MODULES[@]}"; do
-    if qml6 --list-types | grep -q "$module" 2>/dev/null; then
-        echo "   ✅ $module"
+for package in "${QML_PACKAGES[@]}"; do
+    if dpkg -l | grep -q "^ii.*$package"; then
+        echo "   ✅ $package"
     else
-        echo "   ❌ $module (missing)"
-        MISSING_MODULES+=("$module")
+        echo "   ❌ $package (not installed)"
+        MISSING_MODULES+=("$package")
     fi
 done
 echo ""
 
-# Check required packages
+# Check required packages (Ubuntu package names)
 echo "🔍 Checking required packages:"
 REQUIRED_PACKAGES=(
     "qt6-base-dev"
-    "libkf6plasma-dev"
-    "libkf6kirigami2-dev"
-    "libkf6kcmutils-dev"
+    "libplasma-dev"
+    "libkirigami-dev"
+    "libkcmutils-dev"
     "cmake"
+)
+
+# Also check alternative names
+ALTERNATIVE_PACKAGES=(
+    "libkf6plasma-dev:libplasma-dev"
+    "libkf6kirigami2-dev:libkirigami-dev"
+    "libkf6kcmutils-dev:libkcmutils-dev"
 )
 
 MISSING_PACKAGES=()
 for package in "${REQUIRED_PACKAGES[@]}"; do
+    # Check if package is installed (handle different naming)
+    INSTALLED=false
     if dpkg -l | grep -q "^ii.*$package"; then
+        INSTALLED=true
+    else
+        # Try alternative names
+        case "$package" in
+            "libplasma-dev")
+                if dpkg -l | grep -qE "^ii.*libplasma|^ii.*libkf6.*plasma"; then
+                    INSTALLED=true
+                fi
+                ;;
+            "libkirigami-dev")
+                if dpkg -l | grep -qE "^ii.*libkirigami|^ii.*libkf6.*kirigami"; then
+                    INSTALLED=true
+                fi
+                ;;
+            "libkcmutils-dev")
+                if dpkg -l | grep -qE "^ii.*libkcmutils|^ii.*libkf6.*kcmutils"; then
+                    INSTALLED=true
+                fi
+                ;;
+        esac
+    fi
+    
+    if [ "$INSTALLED" = true ]; then
         echo "   ✅ $package"
     else
         echo "   ❌ $package (not installed)"
@@ -104,7 +139,7 @@ echo "  SUMMARY"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
-if [ -z "$PLASMA_VERSION" ] || [ -z "$QT_VERSION" ] || [ -z "$KF6_VERSION" ] || [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
+if [ -z "$PLASMA_VERSION" ] || [ -z "$QT_VERSION" ] || [ ${#MISSING_PACKAGES[@]} -gt 0 ] || [ ${#MISSING_MODULES[@]} -gt 0 ]; then
     echo "⚠️  Some requirements are missing!"
     echo ""
     echo "Install missing packages with:"
@@ -112,15 +147,22 @@ if [ -z "$PLASMA_VERSION" ] || [ -z "$QT_VERSION" ] || [ -z "$KF6_VERSION" ] || 
     if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
         echo "  sudo apt install ${MISSING_PACKAGES[*]}"
     fi
+    if [ ${#MISSING_MODULES[@]} -gt 0 ]; then
+        echo "  sudo apt install ${MISSING_MODULES[*]}"
+    fi
     if [ -z "$PLASMA_VERSION" ]; then
         echo "  sudo apt install kde-plasma-desktop"
+        echo "  # OR for minimal install:"
+        echo "  sudo apt install plasma-desktop plasma-workspace"
     fi
     if [ -z "$QT_VERSION" ]; then
         echo "  sudo apt install qt6-base-dev"
     fi
-    if [ -z "$KF6_VERSION" ]; then
-        echo "  sudo apt install libkf6plasma-dev"
-    fi
+    echo ""
+    echo "Note: On Ubuntu, package names may differ:"
+    echo "  - libkf6plasma-dev → libplasma-dev"
+    echo "  - libkf6kirigami2-dev → libkirigami-dev"
+    echo "  - libkf6kcmutils-dev → libkcmutils-dev"
 else
     echo "✅ All requirements are met!"
     echo "   You can proceed with installation."

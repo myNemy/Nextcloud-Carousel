@@ -31,13 +31,23 @@ sudo apt install \
     qt6-base-dev \
     qt6-declarative-dev \
     qt6-tools-dev \
-    libkf6plasma-dev \
-    libkf6kirigami2-dev \
-    libkf6kcmutils-dev \
-    libkf6config-dev \
+    libplasma-dev \
+    libkirigami-dev \
+    libkcmutils-dev \
+    libkconfig-dev \
+    qml6-module-org-kde-kirigami \
+    qml6-module-org-kde-kcmutils \
+    qml6-module-org-kde-plasma \
+    qml6-module-org-kde-kquickcontrols \
     cmake \
     build-essential
 ```
+
+**Note:** On Ubuntu, KDE Frameworks 6 packages use different names:
+- `libkf6plasma-dev` → `libplasma-dev`
+- `libkf6kirigami2-dev` → `libkirigami-dev`
+- `libkf6kcmutils-dev` → `libkcmutils-dev`
+- `libkf6config-dev` → `libkconfig-dev`
 
 ### 3. Verify Versions
 
@@ -50,8 +60,8 @@ plasmashell --version
 # Check Qt version
 qmake6 --version
 
-# Check KF6 availability
-pkg-config --modversion KF6Plasma
+# Check KF6 availability (may not work on Ubuntu)
+pkg-config --modversion KF6Plasma 2>/dev/null || echo "KF6 not found via pkg-config (check packages instead)"
 ```
 
 **Required versions:**
@@ -159,12 +169,18 @@ ls -la ~/.local/share/plasma/wallpapers/org.nextcloud.carousel/contents/ui/
 If you get errors about missing QML modules:
 
 ```bash
-# Install missing KDE Frameworks
+# Install missing QML modules
 sudo apt install \
     qml6-module-org-kde-kirigami \
     qml6-module-org-kde-kcmutils \
     qml6-module-org-kde-plasma \
     qml6-module-org-kde-kquickcontrols
+
+# Also install development libraries if needed
+sudo apt install \
+    libkirigami-dev \
+    libkcmutils-dev \
+    libplasma-dev
 ```
 
 ### Permission issues
