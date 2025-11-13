@@ -139,6 +139,12 @@ All major settings are now implemented in both backend and UI. The following are
    - All three transition types (Fade, Slide, Zoom) working
    - Default: 0 (Fade)
 
+5. **ShowLoadingIndicator** - ✅ COMPLETE
+   - Fully implemented in UI and backend
+   - CheckBox to show/hide loading indicator
+   - When disabled, loading indicator is hidden during image loading
+   - Default: true
+
 3. **Blur** - Enable/disable blur effect with adjustable opacity
    - **Complexity:** Low-Medium - Checkbox + Slider
    - **Status:** ✅ COMPLETE - Fully implemented in UI
@@ -327,6 +333,21 @@ To implement actual image transitions, the following is required:
   - Fade: OpacityAnimator
   - Slide: PropertyAnimation on x property
   - Zoom: PropertyAnimation on scale property
+
+**ShowLoadingIndicator (UI Implementation)**
+- **Started:** 2024-11-13
+- **Completed:** 2024-11-13
+- **Status:** ✅ COMPLETE
+- **Implementation:**
+  - ✅ CheckBox added to config.qml for show/hide loading indicator
+  - ✅ Translation strings added (EN/IT)
+  - ✅ Property alias cfg_ShowLoadingIndicator configured
+  - ✅ Backend: LoadingPlaceholder visibility controlled by setting
+- **Technical details:**
+  - CheckBox to enable/disable loading indicator visibility
+  - Default: true (loading indicator visible by default)
+  - Loading indicator only shows when both loading=true AND ShowLoadingIndicator=true
+  - Allows users to have a cleaner wallpaper display without loading feedback
 
 **Transition System Implementation (StackView - KDE Official Pattern)**
 - **Started:** 2024-11-13
