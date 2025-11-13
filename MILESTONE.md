@@ -367,9 +367,50 @@ Currently, when an image changes:
 
 ### Solution: Implement Transition System
 
+**📚 Official Documentation Analysis:**
+
+After consulting the official KDE Plasma slideshow plugin (`org.kde.slideshow`) and Qt/QML documentation, we found:
+
+1. **KDE Official Plugin Uses StackView:**
+   - Location: `/usr/share/plasma/wallpapers/org.kde.slideshow/contents/ui/ImageStackView.qml`
+   - Uses `QQC2.StackView` with `replace()` method (not push/pop)
+   - Uses `replaceEnter` and `replaceExit` transitions with `OpacityAnimator`
+   - Implements `pendingImage` pattern: loads image in background before replacing
+   - Keeps old image visible until new image is fully faded in (prevents background showing through)
+
+2. **Qt/QML Official Recommendations:**
+   - Dual Image approach with opacity animation is recommended for smooth transitions
+   - `States` + `Transitions` can be used but is more complex
+   - `Behavior on source` doesn't work well for images (source changes instantly)
+   - `OpacityAnimator` is preferred over `NumberAnimation` for opacity (better performance)
+
+3. **Key Pattern from KDE Plugin:**
+   ```qml
+   // Load image in background
+   pendingImage = component.createObject(view, {...});
+   pendingImage.statusChanged.connect(replaceWhenLoaded);
+   
+   // Replace when loaded
+   view.replace(pendingImage, {}, QQC2.StackView.Transition);
+   
+   // Transitions
+   replaceEnter: Transition {
+       OpacityAnimator {
+           from: 0
+           to: 1
+           duration: Math.round(Kirigami.Units.veryLongDuration * 2.5)
+       }
+   }
+   replaceExit: Transition {
+       PauseAnimation {
+           duration: replaceEnterOpacityAnimator.duration + 500
+       }
+   }
+   ```
+
 To make transitions work, we need to **replace the direct image loading** with a **transition system**. There are two main approaches:
 
-#### **Option 1: Dual Image Layers (Recommended - Simpler)**
+#### **Option 1: Dual Image Layers (Simpler, Qt Recommended)**
 
 **How it works:**
 - Two `Image` components: `currentImage` and `nextImage`
@@ -396,89 +437,205 @@ To make transitions work, we need to **replace the direct image loading** with a
 **Estimated effort:** 2-3 hours
 **Files to modify:** `nextcloud-carousel/contents/ui/main.qml`
 
-#### **Option 2: StackView System (More Complex)**
+#### **Option 2: StackView System (KDE Official Pattern - Recommended)**
 
-**How it works:**
-- Use the existing `StackView` (already defined but unused)
-- Create a component for each image
-- Push new image component onto stack with transition
-- Pop old image component with exit transition
+**How it works (based on official KDE slideshow plugin):**
+- Use `StackView` with `replace()` method (not push/pop)
+- Create image component in background (`pendingImage`)
+- Wait for image to load (`statusChanged` signal)
+- Replace current image with `view.replace(pendingImage, {}, QQC2.StackView.Transition)`
+- Configure `replaceEnter` and `replaceExit` transitions
+- Support different transition types (Fade/Slide/Zoom) via transition configuration
 
-**Implementation steps:**
-1. Create `ImageComponent.qml` for individual images
-2. Modify `loadImageWithAuth()` to create and push new component
-3. Configure StackView transitions based on `TransitionType`
-4. Handle stack management (limit depth, cleanup)
+**Implementation steps (following KDE pattern):**
+1. Fix existing `StackView` (lines 374-397) - currently defined but not used correctly
+2. Create `ImageComponent.qml` for individual images (similar to KDE's `StaticImageComponent.qml`)
+3. Modify `loadImageWithAuth()` to:
+   - Create `pendingImage` component in background
+   - Connect to `statusChanged` signal
+   - Call `replaceWhenLoaded()` when ready
+4. Implement `replaceWhenLoaded()` function:
+   - Disconnect `statusChanged` signal
+   - Call `view.replace(pendingImage, {}, QQC2.StackView.Transition)`
+   - Clean up old image via `onDeactivated` and `onRemoved` signals
+5. Configure transitions based on `TransitionType`:
+   - Fade: `OpacityAnimator` in `replaceEnter`, `PauseAnimation` in `replaceExit`
+   - Slide: `XAnimator` or `YAnimator` for horizontal/vertical movement
+   - Zoom: `ScaleAnimator` for zoom effect
+6. Use `TransitionDuration` setting for animation duration
+7. Handle edge cases (first image, errors, rapid changes)
 
-**Complexity:** High
-**Estimated effort:** 4-5 hours
+**Complexity:** Medium-High
+**Estimated effort:** 3-4 hours
 **Files to modify:** `nextcloud-carousel/contents/ui/main.qml`, create `ImageComponent.qml`
+**Advantages:**
+- ✅ Follows official KDE pattern (proven, tested)
+- ✅ Better memory management (automatic cleanup via StackView)
+- ✅ Supports complex transitions (can combine multiple animators)
+- ✅ Already have StackView defined (just need to fix it)
 
 ### Recommended Approach
 
-**Choose Option 1 (Dual Image Layers)** because:
-- ✅ Simpler to implement
-- ✅ Better performance (only 2 images in memory)
-- ✅ Easier to debug
-- ✅ More control over animations
-- ✅ StackView is overkill for this use case
+**Choose Option 2 (StackView System - KDE Official Pattern)** because:
+- ✅ **Follows official KDE Plasma pattern** (used in `org.kde.slideshow`)
+- ✅ **Proven and tested** in production KDE codebase
+- ✅ **Better memory management** (automatic cleanup via StackView signals)
+- ✅ **Supports complex transitions** (can combine multiple animators for Slide/Zoom)
+- ✅ **StackView already defined** in our code (just needs to be fixed/used correctly)
+- ✅ **Consistent with KDE ecosystem** (easier for future maintainers)
+- ✅ **Handles edge cases** (rapid changes, errors) via built-in StackView mechanisms
 
-### Detailed Implementation Plan (Option 1)
+**Note:** Option 1 (Dual Image Layers) is simpler and also valid (Qt recommended), but Option 2 aligns better with KDE Plasma standards and our existing code structure.
 
-**Step 1: Replace single Image with dual Images**
+### Detailed Implementation Plan (Option 2: StackView - KDE Official Pattern)
+
+**Step 1: Create ImageComponent.qml**
 ```qml
-// Replace this:
-Image {
-    id: imageView
-    // ...
-}
+// nextcloud-carousel/contents/ui/ImageComponent.qml
+import QtQuick
+import QtQuick.Controls as QQC2
 
-// With this:
-Image {
-    id: currentImage
-    // ... (visible, showing current image)
-}
-
-Image {
-    id: nextImage
-    // ... (hidden, opacity=0, for loading next image)
-}
-```
-
-**Step 2: Modify loadImageWithAuth()**
-- Instead of `imageView.source = dataUrl`
-- Use `nextImage.source = dataUrl`
-- After image loads (`onStatusChanged: Image.Ready`), trigger transition
-
-**Step 3: Add transition function**
-```qml
-function startTransition() {
-    var transitionType = root.configuration.TransitionType || 0
-    var duration = root.configuration.TransitionDuration || 1000
+QQC2.StackView {
+    // Component for individual images
+    // Similar to KDE's StaticImageComponent.qml
+    required property url source
+    required property int fillMode
+    required property color color
+    required property bool blur
+    required property real blurOpacity
+    required property real imageScale
     
-    if (transitionType === 0) {
-        // Fade transition
-        // Animate nextImage.opacity 0→1, currentImage.opacity 1→0
-    } else if (transitionType === 1) {
-        // Slide transition
-        // Animate nextImage.x (slide in), currentImage.x (slide out)
-    } else if (transitionType === 2) {
-        // Zoom transition
-        // Animate nextImage.scale (zoom in), currentImage.scale (zoom out)
+    Image {
+        id: image
+        anchors.fill: parent
+        source: parent.source
+        fillMode: parent.fillMode
+        scale: parent.imageScale / 100.0
+        transformOrigin: Item.Center
+        opacity: parent.blur ? (parent.blurOpacity / 100.0) : 1.0
+        asynchronous: true
+        cache: true
+        smooth: true
     }
     
-    // After animation completes, swap images
+    Rectangle {
+        anchors.fill: parent
+        color: parent.color
+        z: -1
+    }
 }
 ```
 
-**Step 4: Update Connections**
-- Add handler for `onTransitionTypeChanged()` to apply new transition type
+**Step 2: Fix StackView in main.qml**
+- Remove unused `Image` component (lines 400-443)
+- Fix `StackView` configuration (lines 374-397)
+- Add `pendingImage` property
+- Add `loadImage()` and `replaceWhenLoaded()` functions
+
+**Step 3: Modify loadImageWithAuth()**
+- Instead of `imageView.source = dataUrl`
+- Create `pendingImage` component using `ImageComponent.qml`
+- Connect to `pendingImage.statusChanged` signal
+- Call `replaceWhenLoaded()` when image is ready
+
+**Step 4: Implement replaceWhenLoaded() function**
+```qml
+function replaceWhenLoaded() {
+    if (pendingImage.status === Image.Loading) {
+        return;
+    }
+    
+    pendingImage.statusChanged.disconnect(replaceWhenLoaded);
+    
+    // Cleanup old image when removed
+    pendingImage.QQC2.StackView.onDeactivated.connect(pendingImage.destroy);
+    pendingImage.QQC2.StackView.onRemoved.connect(pendingImage.destroy);
+    
+    // Replace with transition
+    imageStack.replace(pendingImage, {}, QQC2.StackView.Transition);
+    
+    root.loading = false;
+    pendingImage = null;
+}
+```
+
+**Step 5: Configure StackView transitions based on TransitionType**
+```qml
+QQC2.StackView {
+    id: imageStack
+    
+    property int transitionType: root.configuration.TransitionType || 0
+    property int transitionDuration: root.configuration.TransitionDuration || 1000
+    
+    replaceEnter: Transition {
+        id: enterTransition
+        enabled: !doesSkipAnimation
+        
+        // Fade transition
+        OpacityAnimator {
+            from: 0
+            to: 1
+            duration: imageStack.transitionDuration
+        }
+        
+        // Slide transition (if type == 1)
+        XAnimator {
+            from: imageStack.width
+            to: 0
+            duration: imageStack.transitionDuration
+            enabled: imageStack.transitionType === 1
+        }
+        
+        // Zoom transition (if type == 2)
+        ScaleAnimator {
+            from: 0.8
+            to: 1.0
+            duration: imageStack.transitionDuration
+            enabled: imageStack.transitionType === 2
+        }
+    }
+    
+    replaceExit: Transition {
+        // Keep old image until new one is fully visible
+        PauseAnimation {
+            duration: imageStack.transitionDuration + 100
+        }
+        
+        // Fade out old image
+        OpacityAnimator {
+            from: 1
+            to: 0
+            duration: imageStack.transitionDuration
+        }
+        
+        // Slide out (if type == 1)
+        XAnimator {
+            from: 0
+            to: -imageStack.width
+            duration: imageStack.transitionDuration
+            enabled: imageStack.transitionType === 1
+        }
+        
+        // Zoom out (if type == 2)
+        ScaleAnimator {
+            from: 1.0
+            to: 1.2
+            duration: imageStack.transitionDuration
+            enabled: imageStack.transitionType === 2
+        }
+    }
+}
+```
+
+**Step 6: Update Connections**
+- Add handler for `onTransitionTypeChanged()` to update transition configuration
 - Add handler for `onTransitionDurationChanged()` to update animation duration
 
-**Step 5: Testing**
+**Step 7: Testing**
 - Test each transition type (Fade, Slide, Zoom)
 - Test with different durations
 - Test edge cases (first image, errors, rapid changes)
+- Verify memory cleanup (old images are destroyed)
 
 ### Alternative: Simpler Improvements (If transitions are too complex)
 
