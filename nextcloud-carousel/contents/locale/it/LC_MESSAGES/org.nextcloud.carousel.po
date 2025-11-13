@@ -46,6 +46,12 @@ msgstr "Intervallo slide (secondi):"
 msgid "10"
 msgstr "10"
 
+msgid "Transition Duration (ms):"
+msgstr "Durata transizione (ms):"
+
+msgid "1000"
+msgstr "1000"
+
 msgid "Order Mode:"
 msgstr "Modalità ordine:"
 

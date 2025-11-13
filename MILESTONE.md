@@ -89,9 +89,9 @@ The Nextcloud Carousel plugin has reached a working base with the following feat
 
 4. **Display**
    - ✅ Configurable background color
-   - ⚠️ Transitions partially implemented - StackView defined but not used, only direct image change
-   - ✅ FillMode implemented (Stretch, Fit, Crop, Tile) - backend
-   - ⚠️ Blur implemented - simplified (opacity reduction, not true blur) - backend
+   - ❌ **Transitions NOT IMPLEMENTED** - Image change is instant, no visual transitions between images
+   - ✅ FillMode implemented (Stretch, Fit, Crop, Tile) - backend + UI
+   - ✅ Blur implemented - simplified (opacity reduction, not true blur) - backend + UI
 
 5. **Interface**
    - ✅ Working configuration UI
@@ -110,7 +110,17 @@ The following settings are implemented in the backend (`main.qml`) but are not y
 
 1. **TransitionDuration** - Transition animation duration (ms)
    - **Complexity:** Low - Simple integer input field
-   - **Current behavior:** Controls fade transition duration (default: 1000ms)
+   - **Status:** ✅ COMPLETE - Fully implemented in UI
+   - **Current behavior:** 
+     - ⚠️ **IMPORTANT:** Currently only controls the `Behavior on opacity` animation for blur effect
+     - Does NOT control transitions between images (images change instantly)
+     - Default: 1000ms
+     - Used in: `Behavior on opacity { NumberAnimation { duration: TransitionDuration } }`
+   - **UI Components:**
+     - TextField with IntValidator (100-10000ms range)
+     - Property alias cfg_TransitionDuration configured
+     - Translation strings added (EN/IT)
+   - **Note:** To enable actual image transitions, the transition system must be implemented first (see TransitionType)
 
 2. **TransitionType** - Transition type (Fade/Slide/Zoom)
    - **Complexity:** Medium - Requires implementing actual transitions
@@ -176,6 +186,73 @@ The following settings are implemented in the backend (`main.qml`) but are not y
      - Property alias cfg_ImageScale configured
      - Handler onImageScaleChanged implemented
 
+## 🔄 Image Loading Process (Technical Details)
+
+### Current Image Change Flow
+
+1. **Timer Trigger** (every `SlideInterval` seconds)
+   - `carouselTimer` triggers → calls `carouselController.nextPhoto()`
+
+2. **Next Photo Selection** (`nextPhoto()` function)
+   - Calculates new `currentIndex` based on `RandomOrder` mode:
+     - Mode 0: Sequential `(currentIndex + 1) % length`
+     - Mode 1: Random (avoids immediate repeat)
+     - Mode 2: Sequential through shuffled list
+     - Mode 3: Smart random (avoids last 5 used)
+   - Calls `updateCurrentImage()`
+
+3. **Image Update** (`updateCurrentImage()` function)
+   - Gets URL from `photoList[currentIndex]`
+   - Calls `loadImageWithAuth(photoUrl)`
+
+4. **Image Download** (`loadImageWithAuth()` function)
+   - Sets `root.loading = true` (shows loading indicator)
+   - Extracts clean URL (removes `username:password@`)
+   - Performs `XMLHttpRequest GET` with Basic Authentication
+   - `responseType = "arraybuffer"`
+
+5. **Image Conversion**
+   - ArrayBuffer → Base64 (manual conversion, `btoa()` not available in QML)
+   - Determines MIME type from file extension (`.jpg`, `.png`, `.gif`, `.webp`, `.svg`)
+   - Creates data URL: `"data:image/jpeg;base64,..."`
+
+6. **Image Display**
+   - **Direct assignment:** `imageView.source = dataUrl`
+   - **Result:** ⚠️ **INSTANT CHANGE** - No transition animation
+   - Image component loads and displays immediately
+   - `root.loading = false` (hides loading indicator)
+
+### Current Limitations
+
+- ❌ **No visual transitions** between images
+- ❌ **Instant image change** - `imageView.source` is changed directly
+- ⚠️ `Behavior on opacity` exists but only controls blur opacity animation, not image transitions
+- ⚠️ `StackView` is defined in code but **NOT USED**
+- ⚠️ `TransitionDuration` setting exists but only affects blur opacity animation, not image transitions
+
+### What's Needed for Real Transitions
+
+To implement actual image transitions, the following is required:
+
+1. **Dual Image Layers** or **StackView System**
+   - Two `Image` components (current + next)
+   - Or use `StackView` with proper push/pop transitions
+
+2. **Transition Animations**
+   - Fade: opacity 0→1 on new image, 1→0 on old image
+   - Slide: horizontal/vertical position animation
+   - Zoom: scale animation
+
+3. **Transition Coordination**
+   - Load next image in background
+   - Start transition animation
+   - Swap images at animation midpoint or end
+   - Clean up old image
+
+4. **TransitionType Implementation**
+   - Map `TransitionType` setting to actual transition behavior
+   - Apply `TransitionDuration` to transition animations
+
 ## 🚧 Development Status
 
 ### Completed
@@ -216,16 +293,31 @@ The following settings are implemented in the backend (`main.qml`) but are not y
   - Scale conversion: ImageScale/100.0 for QML scale property
   - All Tile options (Tile, TileVertically, TileHorizontally) available
 
+**TransitionDuration (UI Implementation)**
+- **Started:** 2024-11-13
+- **Completed:** 2024-11-13
+- **Status:** ✅ COMPLETE
+- **Implementation:**
+  - ✅ TextField added to config.qml with IntValidator (100-10000ms)
+  - ✅ Translation strings added (EN/IT)
+  - ✅ Property alias cfg_TransitionDuration configured
+  - ✅ Already used in backend for `Behavior on opacity` animation
+- **Technical details:**
+  - TextField with IntValidator for input validation
+  - Range: 100-10000ms (default: 1000ms)
+  - Controls blur opacity animation duration
+  - Note: Does not control image transitions (not yet implemented)
+
 ## 📝 Next Steps
 
 1. ✅ Add Blur setting to configuration interface (COMPLETE)
 2. ✅ Add FillMode and ImageScale to configuration interface (COMPLETE)
-3. Add remaining missing settings to the configuration interface:
-   - TransitionDuration
-   - TransitionType
-4. Improve validation and user feedback
-5. Add settings preview
-6. Optimize performance for large photo collections
+3. ✅ Add TransitionDuration to configuration interface (COMPLETE)
+4. Add remaining missing settings to the configuration interface:
+   - TransitionType (requires full transition system implementation)
+5. Improve validation and user feedback
+6. Add settings preview
+7. Optimize performance for large photo collections
 
 ## 🔮 Planned Features
 

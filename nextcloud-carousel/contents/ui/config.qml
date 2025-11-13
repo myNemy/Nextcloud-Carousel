@@ -17,6 +17,7 @@ Kirigami.FormLayout {
     property alias cfg_Password: passwordField.text
     property alias cfg_PhotoPath: photoPathField.text
     property alias cfg_SlideInterval: slideIntervalField.text
+    property alias cfg_TransitionDuration: transitionDurationField.text
     property alias cfg_RandomOrder: randomOrderComboBox.currentIndex
     property alias cfg_Blur: blurCheckBox.checked
     property alias cfg_BlurOpacity: blurOpacitySlider.value
@@ -54,6 +55,16 @@ Kirigami.FormLayout {
         id: slideIntervalField
         Kirigami.FormData.label: i18n("Slide Interval (seconds):")
         placeholderText: i18n("10")
+    }
+
+    QtControls2.TextField {
+        id: transitionDurationField
+        Kirigami.FormData.label: i18n("Transition Duration (ms):")
+        placeholderText: i18n("1000")
+        validator: IntValidator {
+            bottom: 100
+            top: 10000
+        }
     }
 
     QtControls2.ComboBox {
