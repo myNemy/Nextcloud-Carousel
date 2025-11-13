@@ -27,11 +27,16 @@ echo "   Ubuntu Version:"
 lsb_release -a 2>/dev/null | grep -E "Description|Release" || echo "   ⚠️  lsb_release not found"
 echo ""
 
-# Check KDE Plasma
+# Check KDE Plasma (multiple methods)
 echo "🔍 Checking KDE Plasma:"
+PLASMA_VERSION=""
+PLASMA_INSTALLED=false
+
+# Method 1: Check if plasmashell is running
 PLASMA_VERSION=$(plasmashell --version 2>/dev/null | head -1)
 if [ -n "$PLASMA_VERSION" ]; then
-    echo "   ✅ Plasma found: $PLASMA_VERSION"
+    echo "   ✅ Plasma running: $PLASMA_VERSION"
+    PLASMA_INSTALLED=true
     PLASMA_MAJOR=$(echo "$PLASMA_VERSION" | grep -oE "[0-9]+\.[0-9]+" | head -1 | cut -d. -f1)
     if [ "$PLASMA_MAJOR" -ge 6 ]; then
         echo "   ✅ Plasma version 6.x or higher (compatible)"
@@ -39,8 +44,26 @@ if [ -n "$PLASMA_VERSION" ]; then
         echo "   ⚠️  Plasma version is below 6.0 (may not work)"
     fi
 else
-    echo "   ❌ Plasma not found or not running"
-    echo "   💡 Install with: sudo apt install kde-plasma-desktop"
+    # Method 2: Check if Plasma packages are installed
+    if dpkg -l | grep -qE "^ii.*plasma-desktop|^ii.*plasma-workspace|^ii.*kde-plasma|^ii.*libplasma"; then
+        PLASMA_PACKAGES=$(dpkg -l | grep -E "^ii.*(plasma-desktop|plasma-workspace|kde-plasma|libplasma)" | head -3 | awk '{print $2}' | tr '\n' ' ')
+        echo "   ✅ Plasma packages installed (but plasmashell not running)"
+        echo "   💡 Found packages: $PLASMA_PACKAGES"
+        PLASMA_INSTALLED=true
+        
+        # Try to get version from package
+        PLASMA_PKG_VERSION=$(dpkg -l | grep -E "^ii.*plasma-workspace" | awk '{print $3}' | head -1)
+        if [ -n "$PLASMA_PKG_VERSION" ]; then
+            PLASMA_MAJOR=$(echo "$PLASMA_PKG_VERSION" | cut -d. -f1)
+            if [ "$PLASMA_MAJOR" -ge 6 ]; then
+                echo "   ✅ Plasma package version 6.x or higher (compatible)"
+            fi
+        fi
+    else
+        echo "   ❌ Plasma not found"
+        echo "   💡 Install with: sudo apt install kde-plasma-desktop"
+        echo "   💡 Or minimal: sudo apt install plasma-desktop plasma-workspace"
+    fi
 fi
 echo ""
 
@@ -147,7 +170,7 @@ for package in "${REQUIRED_PACKAGES[@]}"; do
                 done
                 ;;
             "libkf6kcmutils-dev")
-                for alt in libkf5kcmutils-dev libkcmutils6 libkcmutils-dev libkcmutils kcmutils-dev libkf6-kcmutils-dev libkf5-kcmutils-dev; do
+                for alt in libkf6kcmutils-dev libkf5kcmutils-dev libkcmutils6 libkcmutils-dev libkcmutils kcmutils-dev libkf6-kcmutils-dev libkf5-kcmutils-dev; do
                     if dpkg -l | grep -qE "^ii.*$alt"; then
                         INSTALLED=true
                         INSTALLED_NAME="$alt"
@@ -177,7 +200,7 @@ echo "  SUMMARY"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
-if [ -z "$PLASMA_VERSION" ] || [ -z "$QT_VERSION" ] || [ ${#MISSING_PACKAGES[@]} -gt 0 ] || [ ${#MISSING_MODULES[@]} -gt 0 ]; then
+if [ "$PLASMA_INSTALLED" = false ] || [ -z "$QT_VERSION" ] || [ ${#MISSING_PACKAGES[@]} -gt 0 ] || [ ${#MISSING_MODULES[@]} -gt 0 ]; then
     echo "⚠️  Some requirements are missing!"
     echo ""
     echo "Install missing packages with:"
@@ -188,7 +211,7 @@ if [ -z "$PLASMA_VERSION" ] || [ -z "$QT_VERSION" ] || [ ${#MISSING_PACKAGES[@]}
     if [ ${#MISSING_MODULES[@]} -gt 0 ]; then
         echo "  sudo apt install ${MISSING_MODULES[*]}"
     fi
-    if [ -z "$PLASMA_VERSION" ]; then
+    if [ "$PLASMA_INSTALLED" = false ]; then
         echo "  sudo apt install kde-plasma-desktop"
         echo "  # OR for minimal install:"
         echo "  sudo apt install plasma-desktop plasma-workspace"
