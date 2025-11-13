@@ -279,7 +279,7 @@ WallpaperItem {
             return base64
         }
         
-        function loadImageWithAuth(imageUrl) {
+        function loadImageWithAuth(imageUrl, skipAnimation) {
             root.loading = true
             
             // Extract URL without auth for the request
@@ -328,10 +328,66 @@ WallpaperItem {
                         
                         var dataUrl = "data:" + mimeType + ";base64," + base64
                         console.log("Image converted to data URL, MIME type:", mimeType)
-                        console.log("Creating pending image component (data URL length:", dataUrl.length, ")")
+                        console.log("Creating image component for StackView (data URL length:", dataUrl.length, ")")
                         
-                        // Create pending image component using ImageComponent.qml
-                        carouselController.loadImageComponent(dataUrl)
+                        // Use StackView pattern (following KDE official implementation)
+                        // Clean up any existing pending image
+                        if (imageStack.pendingImage) {
+                            imageStack.pendingImage.statusChanged.disconnect(imageStack.replaceWhenLoaded)
+                            imageStack.pendingImage.destroy()
+                            imageStack.pendingImage = null
+                        }
+                        
+                        // Determine if we should skip animation (first image or explicit skip)
+                        imageStack.doesSkipAnimation = (imageStack.currentItem === undefined) || !!skipAnimation
+                        
+                        // Create image component in background (following KDE pattern)
+                        var component = imageStack.imageComponent
+                        console.log("Component status:", component ? component.status : "null")
+                        if (component && component.status === Component.Ready) {
+                            console.log("Creating image component with data URL")
+                            console.log("StackView dimensions:", imageStack.width, "x", imageStack.height)
+                            // Create with explicit dimensions to avoid size issues
+                            imageStack.pendingImage = component.createObject(imageStack, {
+                                "source": dataUrl,
+                                "fillMode": root.configuration.FillMode,
+                                "color": root.configuration.Color,
+                                "blur": root.configuration.Blur,
+                                "blurOpacity": root.configuration.BlurOpacity,
+                                "imageScale": root.configuration.ImageScale,
+                                "width": imageStack.width,
+                                "height": imageStack.height
+                            })
+                            
+                            if (imageStack.pendingImage) {
+                                console.log("Image component created:")
+                                console.log("  - status:", imageStack.pendingImage.status, "Image.Ready =", Image.Ready)
+                                console.log("  - dimensions:", imageStack.pendingImage.width, "x", imageStack.pendingImage.height)
+                                console.log("  - visible:", imageStack.pendingImage.visible)
+                                console.log("  - opacity:", imageStack.pendingImage.opacity)
+                                // Connect to statusChanged to replace when loaded
+                                // Note: statusChanged signal is automatically available via property alias
+                                if (imageStack.pendingImage.statusChanged) {
+                                    imageStack.pendingImage.statusChanged.connect(imageStack.replaceWhenLoaded)
+                                    console.log("Connected to statusChanged signal")
+                                } else {
+                                    console.warn("statusChanged signal not available!")
+                                }
+                                // Try to replace immediately (will wait if still loading)
+                                imageStack.replaceWhenLoaded()
+                            } else {
+                                console.error("Failed to create image component:", component ? component.errorString() : "component is null")
+                                root.loading = false
+                            }
+                        } else {
+                            console.error("Image component not ready. Status:", component ? component.status : "null", "Error:", component ? component.errorString() : "component is null")
+                            // Fallback: try to create component on the fly
+                            if (!component || component.status === Component.Error) {
+                                console.log("Attempting to reload ImageComponent")
+                                imageStack.imageComponent = Qt.createComponent("ImageComponent.qml", imageStack)
+                            }
+                            root.loading = false
+                        }
                     } else {
                         console.error("Failed to load image. Status:", xhr.status, xhr.statusText)
                         if (xhr.status === 401) {
@@ -350,118 +406,6 @@ WallpaperItem {
             }
             
             xhr.send()
-        }
-        
-        property Item pendingImage: null
-        property bool doesSkipAnimation: true
-        
-        function loadImageComponent(dataUrl) {
-            // Clean up previous pending image if exists
-            if (pendingImage) {
-                if (pendingImage.statusChanged) {
-                    pendingImage.statusChanged.disconnect(replaceWhenLoaded)
-                }
-                pendingImage.destroy()
-                pendingImage = null
-            }
-            
-            // Check if we should skip animation (first image or size change)
-            doesSkipAnimation = imageStack.currentItem === undefined
-            
-            console.log("Creating pending image with dataUrl length:", dataUrl.length)
-            
-            // Create image directly (simplest approach)
-            var imageItem = Qt.createQmlObject('
-                import QtQuick
-                Item {
-                    Rectangle {
-                        anchors.fill: parent
-                        color: "' + root.configuration.Color + '"
-                        z: -1
-                    }
-                    Image {
-                        id: mainImage
-                        anchors.fill: parent
-                        source: "' + dataUrl + '"
-                        fillMode: {
-                            var mode = ' + root.configuration.FillMode + '
-                            if (mode === 0) return Image.Stretch
-                            if (mode === 1) return Image.PreserveAspectFit
-                            if (mode === 2) return Image.PreserveAspectCrop
-                            if (mode === 3) return Image.Tile
-                            if (mode === 4) return Image.TileVertically
-                            if (mode === 5) return Image.TileHorizontally
-                            return Image.PreserveAspectCrop
-                        }
-                        scale: ' + (root.configuration.ImageScale / 100.0) + '
-                        transformOrigin: Item.Center
-                        asynchronous: true
-                        cache: true
-                        smooth: true
-                        autoTransform: true
-                        opacity: ' + (root.configuration.Blur ? (root.configuration.BlurOpacity / 100.0) : 1.0) + '
-                        sourceSize: Qt.size(' + (root.width * Screen.devicePixelRatio) + ', ' + (root.height * Screen.devicePixelRatio) + ')
-                    }
-                    readonly property alias status: mainImage.status
-                }
-            ', imageStack, "ImageItem")
-            
-            if (!imageItem) {
-                console.error("Failed to create image item")
-                root.loading = false
-                return
-            }
-            
-            pendingImage = imageItem
-            
-            // Connect to statusChanged to replace when loaded
-            if (pendingImage.statusChanged) {
-                pendingImage.statusChanged.connect(replaceWhenLoaded)
-            }
-            // Check immediately if already loaded
-            Qt.callLater(replaceWhenLoaded)
-        }
-        
-        function replaceWhenLoaded() {
-            if (!pendingImage) {
-                return
-            }
-            
-            if (pendingImage.status === Image.Loading) {
-                return
-            }
-            
-            // Disconnect signal
-            pendingImage.statusChanged.disconnect(replaceWhenLoaded)
-            
-            // Store reference for cleanup
-            var imageToReplace = pendingImage
-            pendingImage = null
-            
-            // Cleanup old image when removed (KDE pattern)
-            imageToReplace.QQC2.StackView.onDeactivated.connect(function() {
-                Qt.callLater(function() {
-                    if (imageToReplace) {
-                        imageToReplace.destroy()
-                    }
-                })
-            })
-            imageToReplace.QQC2.StackView.onRemoved.connect(function() {
-                Qt.callLater(function() {
-                    if (imageToReplace) {
-                        imageToReplace.destroy()
-                    }
-                })
-            })
-            
-            // Replace with transition (KDE pattern)
-            imageStack.replace(imageToReplace, {}, QQC2.StackView.Transition)
-            
-            root.loading = false
-            
-            if (imageToReplace.status !== Image.Ready) {
-                console.warn("Image not ready, status:", imageToReplace.status)
-            }
         }
     }
     
@@ -484,98 +428,155 @@ WallpaperItem {
             color: root.configuration.Color
         }
         
-        // Image stack for smooth transitions (KDE pattern)
+        // Image stack for smooth transitions (following KDE official pattern)
         QQC2.StackView {
             id: imageStack
             anchors.fill: parent
             
-            property int transitionType: root.configuration.TransitionType || 0
+            // Properties for transition configuration
             property int transitionDuration: root.configuration.TransitionDuration || 1000
-            property bool doesSkipAnimation: carouselController.doesSkipAnimation
+            property int transitionType: root.configuration.TransitionType || 0
+            property bool doesSkipAnimation: true
             
-            // Replace enter transition (new image appears)
-            replaceEnter: Transition {
-                id: enterTransition
-                enabled: !imageStack.doesSkipAnimation
-                
-                // Fade transition (default, type 0)
-                OpacityAnimator {
-                    id: fadeEnterAnimator
-                    from: 0
-                    to: 1
-                    duration: imageStack.transitionDuration
-                    enabled: imageStack.transitionType === 0
-                }
-                
-                // Slide transition (type 1) - horizontal slide in
-                XAnimator {
-                    id: slideEnterAnimator
-                    from: imageStack.width
-                    to: 0
-                    duration: imageStack.transitionDuration
-                    enabled: imageStack.transitionType === 1
-                }
-                
-                // Zoom transition (type 2) - zoom in
-                ScaleAnimator {
-                    id: zoomEnterAnimator
-                    from: 0.8
-                    to: 1.0
-                    duration: imageStack.transitionDuration
-                    enabled: imageStack.transitionType === 2
-                }
-                
-                // Always fade in even for slide/zoom (for smooth effect)
-                OpacityAnimator {
-                    from: 0
-                    to: 1
-                    duration: imageStack.transitionDuration
-                    enabled: imageStack.transitionType !== 0
+            // Pending image (loaded in background before replacing)
+            property Item pendingImage: null
+            
+            // Component for creating image items (lazy loading)
+            property Component imageComponent: null
+            
+            Component.onCompleted: {
+                console.log("StackView Component.onCompleted: loading ImageComponent")
+                imageComponent = Qt.createComponent("ImageComponent.qml", imageStack)
+                if (imageComponent.status === Component.Error) {
+                    console.error("Failed to load ImageComponent:", imageComponent.errorString())
+                } else if (imageComponent.status === Component.Ready) {
+                    console.log("ImageComponent loaded successfully")
+                } else {
+                    console.log("ImageComponent loading, status:", imageComponent.status)
+                    // Wait for component to be ready
+                    imageComponent.statusChanged.connect(function() {
+                        if (imageComponent.status === Component.Ready) {
+                            console.log("ImageComponent ready after async load")
+                        } else if (imageComponent.status === Component.Error) {
+                            console.error("ImageComponent failed to load:", imageComponent.errorString())
+                        }
+                    })
                 }
             }
             
-            // Replace exit transition (old image disappears)
-            replaceExit: Transition {
-                // Keep old image until new one is fully visible (KDE pattern)
-                // Prevents background from showing through
-                PauseAnimation {
-                    duration: imageStack.transitionDuration + 100
-                }
+            // Transition configuration based on TransitionType
+            // Note: Following KDE pattern - simple fade for now (like org.kde.slideshow)
+            // Complex transitions (Slide/Zoom) will be implemented later using a different approach
+            replaceEnter: Transition {
+                id: replaceEnterTransition
+                enabled: !imageStack.doesSkipAnimation
                 
-                // Fade out old image
+                // Fade transition (always active when transition enabled)
                 OpacityAnimator {
-                    id: fadeExitAnimator
-                    from: 1
-                    to: 0
-                    duration: imageStack.transitionDuration
-                    enabled: imageStack.transitionType === 0
-                }
-                
-                // Slide out (type 1) - horizontal slide out
-                XAnimator {
-                    id: slideExitAnimator
+                    id: replaceEnterOpacityAnimator
                     from: 0
-                    to: -imageStack.width
+                    to: 1
                     duration: imageStack.transitionDuration
-                    enabled: imageStack.transitionType === 1
+                }
+            }
+            
+            // Keep old image until new one is fully visible (prevents background showing through)
+            // Following KDE pattern: PauseAnimation keeps old image visible during enter transition
+            replaceExit: Transition {
+                // Pause to keep old image visible during enter transition
+                PauseAnimation {
+                    // 100ms buffer to ensure smooth transition
+                    duration: replaceEnterOpacityAnimator.duration + 100
+                }
+            }
+            
+            // Function to replace image when loaded (following KDE pattern)
+            function replaceWhenLoaded() {
+                if (!pendingImage) {
+                    console.log("replaceWhenLoaded: no pendingImage")
+                    return
                 }
                 
-                // Zoom out (type 2) - zoom out
-                ScaleAnimator {
-                    id: zoomExitAnimator
-                    from: 1.0
-                    to: 1.2
-                    duration: imageStack.transitionDuration
-                    enabled: imageStack.transitionType === 2
+                console.log("replaceWhenLoaded: checking status, current status:", pendingImage.status)
+                
+                // Wait for image to finish loading
+                if (pendingImage.status === Image.Loading) {
+                    console.log("replaceWhenLoaded: image still loading, waiting...")
+                    return
                 }
                 
-                // Always fade out even for slide/zoom (for smooth effect)
-                OpacityAnimator {
-                    from: 1
-                    to: 0
-                    duration: imageStack.transitionDuration
-                    enabled: imageStack.transitionType !== 0
+                console.log("replaceWhenLoaded: image ready, replacing in StackView")
+                
+                // Disconnect statusChanged signal
+                pendingImage.statusChanged.disconnect(replaceWhenLoaded)
+                
+                // Cleanup old image when removed (memory management)
+                // Store reference to avoid null errors
+                var imageToCleanup = pendingImage
+                imageToCleanup.QQC2.StackView.onDeactivated.connect(function() {
+                    console.log("Image deactivated, destroying")
+                    if (imageToCleanup) {
+                        imageToCleanup.destroy()
+                    }
+                })
+                imageToCleanup.QQC2.StackView.onRemoved.connect(function() {
+                    console.log("Image removed, destroying")
+                    if (imageToCleanup) {
+                        imageToCleanup.destroy()
+                    }
+                })
+                
+                // Replace with transition
+                console.log("Calling imageStack.replace() with pendingImage")
+                var result = imageStack.replace(pendingImage, {}, QQC2.StackView.Transition)
+                console.log("replace() result:", result)
+                console.log("StackView currentItem:", imageStack.currentItem)
+                console.log("StackView depth:", imageStack.depth)
+                
+                root.loading = false
+                
+                // Handle errors
+                if (pendingImage.status !== Image.Ready) {
+                    console.warn("Image failed to load, status:", pendingImage.status)
+                } else {
+                    console.log("Image successfully replaced in StackView")
+                    console.log("Current item source:", imageStack.currentItem ? imageStack.currentItem.source : "null")
                 }
+                
+                var tempPending = pendingImage
+                pendingImage = null
+                
+                // Verify the item is actually in the StackView
+                Qt.callLater(function() {
+                    if (imageStack.currentItem) {
+                        console.log("StackView currentItem verified:")
+                        console.log("  - visible:", imageStack.currentItem.visible)
+                        console.log("  - opacity:", imageStack.currentItem.opacity)
+                        console.log("  - width:", imageStack.currentItem.width, "height:", imageStack.currentItem.height)
+                        console.log("  - source:", imageStack.currentItem.source)
+                        console.log("  - image status:", imageStack.currentItem.status)
+                        // Check if image inside is visible
+                        if (imageStack.currentItem.children && imageStack.currentItem.children.length > 0) {
+                            var imageChild = null
+                            for (var i = 0; i < imageStack.currentItem.children.length; i++) {
+                                if (imageStack.currentItem.children[i].source !== undefined) {
+                                    imageChild = imageStack.currentItem.children[i]
+                                    break
+                                }
+                            }
+                            if (imageChild) {
+                                console.log("  - Image child found:")
+                                console.log("    - visible:", imageChild.visible)
+                                console.log("    - opacity:", imageChild.opacity)
+                                console.log("    - width:", imageChild.width, "height:", imageChild.height)
+                                console.log("    - source:", imageChild.source)
+                                console.log("    - status:", imageChild.status)
+                            }
+                        }
+                    } else {
+                        console.error("StackView currentItem is null after replace!")
+                    }
+                })
             }
         }
         
@@ -598,28 +599,26 @@ WallpaperItem {
         }
         function onBlurChanged() {
             console.log("Blur setting changed:", root.configuration.Blur)
-            // Blur is now handled in ImageComponent
+            // Settings will be applied to next image via ImageComponent
         }
         function onBlurOpacityChanged() {
             console.log("Blur opacity changed:", root.configuration.BlurOpacity, "%")
-            // Blur opacity is now handled in ImageComponent
+            // Settings will be applied to next image via ImageComponent
         }
         function onFillModeChanged() {
             console.log("FillMode changed:", root.configuration.FillMode)
-            // FillMode is now handled in ImageComponent
+            // Settings will be applied to next image via ImageComponent
         }
         function onImageScaleChanged() {
             console.log("Image scale changed:", root.configuration.ImageScale, "%")
-            // ImageScale is now handled in ImageComponent
+            // Settings will be applied to next image via ImageComponent
         }
         function onTransitionTypeChanged() {
             console.log("Transition type changed:", root.configuration.TransitionType)
-            // Update StackView transition type
             imageStack.transitionType = root.configuration.TransitionType || 0
         }
         function onTransitionDurationChanged() {
             console.log("Transition duration changed:", root.configuration.TransitionDuration, "ms")
-            // Update StackView transition duration
             imageStack.transitionDuration = root.configuration.TransitionDuration || 1000
         }
     }
