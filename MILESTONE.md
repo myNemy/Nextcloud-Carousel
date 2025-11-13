@@ -225,41 +225,44 @@ All major settings are now implemented in both backend and UI. The following are
    - Creates data URL: `"data:image/jpeg;base64,..."`
 
 6. **Image Display**
-   - **Direct assignment:** `imageView.source = dataUrl`
-   - **Result:** ⚠️ **INSTANT CHANGE** - No transition animation
-   - Image component loads and displays immediately
-   - `root.loading = false` (hides loading indicator)
+   - **StackView pattern:** ImageComponent created and added via `StackView.replace()`
+   - **Result:** ✅ **Smooth transitions** - Fade, Slide, or Zoom animations
+   - Image component loads in background, then transitions smoothly
+   - `root.loading = false` (hides loading indicator when done)
 
-### Current Limitations
+### ✅ Current Status - All Features Implemented
 
-- ❌ **No visual transitions** between images
-- ❌ **Instant image change** - `imageView.source` is changed directly
-- ⚠️ `Behavior on opacity` exists but only controls blur opacity animation, not image transitions
-- ⚠️ `StackView` is defined in code but **NOT USED**
-- ⚠️ `TransitionDuration` setting exists but only affects blur opacity animation, not image transitions
+- ✅ **Visual transitions** between images - All working (Fade, Slide, Zoom)
+- ✅ **Smooth image changes** - Using StackView with replace() method
+- ✅ `Behavior on opacity` used for blur opacity animation
+- ✅ `StackView` fully implemented and working with transitions
+- ✅ `TransitionDuration` setting controls all transition animations
 
-### What's Needed for Real Transitions
+### ✅ Transition System - Fully Implemented
 
-To implement actual image transitions, the following is required:
+The transition system has been successfully implemented using StackView (KDE official pattern):
 
-1. **Dual Image Layers** or **StackView System**
-   - Two `Image` components (current + next)
-   - Or use `StackView` with proper push/pop transitions
+1. ✅ **StackView System** - IMPLEMENTED
+   - Uses `StackView` with `replace()` method (not push/pop)
+   - `ImageComponent.qml` created for individual images
+   - `pendingImage` pattern: loads image in background before replacing
 
-2. **Transition Animations**
-   - Fade: opacity 0→1 on new image, 1→0 on old image
-   - Slide: horizontal/vertical position animation
-   - Zoom: scale animation
+2. ✅ **Transition Animations** - ALL IMPLEMENTED
+   - ✅ Fade: OpacityAnimator (opacity 0→1 on new, 1→0 on old)
+   - ✅ Slide: PropertyAnimation on x property (horizontal slide)
+   - ✅ Zoom: PropertyAnimation on scale property (zoom in/out)
 
-3. **Transition Coordination**
-   - Load next image in background
-   - Start transition animation
-   - Swap images at animation midpoint or end
-   - Clean up old image
+3. ✅ **Transition Coordination** - IMPLEMENTED
+   - Load next image in background (`pendingImage`)
+   - Wait for image to load (`statusChanged` signal)
+   - Start transition animation via `StackView.replace()`
+   - Clean up old image automatically via StackView signals
 
-4. **TransitionType Implementation**
-   - Map `TransitionType` setting to actual transition behavior
-   - Apply `TransitionDuration` to transition animations
+4. ✅ **TransitionType Implementation** - IMPLEMENTED
+   - ✅ `TransitionType` setting mapped to actual transition behavior (0=Fade, 1=Slide, 2=Zoom)
+   - ✅ `TransitionDuration` applied to all transition animations
+   - ✅ `TransitionEnabled` to enable/disable transitions
+   - ✅ `TransitionRandom` to randomize transition type per image
 
 ## 🚧 Development Status
 
