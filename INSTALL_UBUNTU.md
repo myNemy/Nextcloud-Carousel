@@ -25,12 +25,40 @@ sudo apt install kubuntu-desktop
 
 Install the following packages:
 
+**First, search for available packages on your Ubuntu system:**
+
+```bash
+# Search for KDE Frameworks 6 packages
+apt search plasma-framework | grep -i dev
+apt search kirigami | grep -i dev
+apt search kcmutils | grep -i dev
+```
+
+**Then install the packages (try these names):**
+
 ```bash
 sudo apt update
 sudo apt install \
     qt6-base-dev \
     qt6-declarative-dev \
     qt6-tools-dev \
+    libplasma6-dev \
+    libkirigami2-6 \
+    libkcmutils6 \
+    libkconfig6 \
+    qml6-module-org-kde-kirigami \
+    qml6-module-org-kde-kcmutils \
+    qml6-module-org-kde-plasma \
+    qml6-module-org-kde-kquickcontrols \
+    cmake \
+    build-essential
+```
+
+**If the above packages are not found, try alternatives:**
+
+```bash
+sudo apt install \
+    qt6-base-dev \
     libplasma-dev \
     libkirigami-dev \
     libkcmutils-dev \
@@ -43,11 +71,11 @@ sudo apt install \
     build-essential
 ```
 
-**Note:** On Ubuntu, KDE Frameworks 6 packages use different names:
-- `libkf6plasma-dev` → `libplasma-dev`
-- `libkf6kirigami2-dev` → `libkirigami-dev`
-- `libkf6kcmutils-dev` → `libkcmutils-dev`
-- `libkf6config-dev` → `libkconfig-dev`
+**Note:** Package names on Ubuntu 25.04 may vary. Common variants:
+- `libplasma6-dev` or `libplasma-dev` or `plasma-framework-dev`
+- `libkirigami2-6` or `libkirigami-dev` or `kirigami2-dev`
+- `libkcmutils6` or `libkcmutils-dev` or `kcmutils-dev`
+- `libkconfig6` or `libkconfig-dev`
 
 ### 3. Verify Versions
 

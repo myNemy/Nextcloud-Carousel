@@ -6,6 +6,21 @@ echo "  Nextcloud Carousel - Ubuntu 25.04 Requirements Check"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 
+# Function to search for available packages
+search_packages() {
+    echo "🔍 Searching for available KDE packages on this system..."
+    echo ""
+    echo "Plasma framework packages:"
+    apt-cache search plasma-framework 2>/dev/null | grep -i "dev\|6" | head -5 || echo "   (apt-cache not available, try: apt search plasma-framework)"
+    echo ""
+    echo "Kirigami packages:"
+    apt-cache search kirigami 2>/dev/null | grep -i "dev\|6\|2" | head -5 || echo "   (apt-cache not available, try: apt search kirigami)"
+    echo ""
+    echo "KCMUtils packages:"
+    apt-cache search kcmutils 2>/dev/null | grep -i "dev\|6" | head -5 || echo "   (apt-cache not available, try: apt search kcmutils)"
+    echo ""
+}
+
 # Check Ubuntu version
 echo "📋 System Information:"
 echo "   Ubuntu Version:"
@@ -51,12 +66,14 @@ echo "🔍 Checking KDE Frameworks 6:"
 KF6_VERSION=$(pkg-config --modversion KF6Plasma 2>/dev/null)
 if [ -n "$KF6_VERSION" ]; then
     echo "   ✅ KF6 found via pkg-config: $KF6_VERSION"
-elif dpkg -l | grep -qE "^ii.*libplasma|^ii.*libkirigami|^ii.*libkcmutils"; then
+elif dpkg -l | grep -qE "^ii.*libplasma|^ii.*libkirigami|^ii.*libkcmutils|^ii.*plasma-framework|^ii.*kirigami"; then
     echo "   ✅ KF6 packages found (Ubuntu naming)"
-    echo "   💡 Note: Ubuntu uses different package names (libplasma-dev, libkirigami-dev, etc.)"
+    INSTALLED_KF6=$(dpkg -l | grep -E "^ii.*(libplasma|libkirigami|libkcmutils|plasma-framework|kirigami)" | head -3 | awk '{print $2}' | tr '\n' ' ')
+    echo "   💡 Found packages: $INSTALLED_KF6"
 else
     echo "   ❌ KF6 packages not found"
-    echo "   💡 Install with: sudo apt install libplasma-dev libkirigami-dev libkcmutils-dev"
+    echo "   💡 Try installing: sudo apt install libplasma6-dev libkirigami2-6 libkcmutils6"
+    echo "   💡 Or alternatives: sudo apt install libplasma-dev libkirigami-dev libkcmutils-dev"
 fi
 echo ""
 
@@ -80,52 +97,73 @@ for package in "${QML_PACKAGES[@]}"; do
 done
 echo ""
 
-# Check required packages (Ubuntu package names)
+# Check required packages (Ubuntu package names - try multiple variants)
 echo "🔍 Checking required packages:"
 REQUIRED_PACKAGES=(
     "qt6-base-dev"
-    "libplasma-dev"
-    "libkirigami-dev"
-    "libkcmutils-dev"
+    "libplasma6-dev"
+    "libkirigami2-6"
+    "libkcmutils6"
     "cmake"
 )
 
-# Also check alternative names
-ALTERNATIVE_PACKAGES=(
-    "libkf6plasma-dev:libplasma-dev"
-    "libkf6kirigami2-dev:libkirigami-dev"
-    "libkf6kcmutils-dev:libkcmutils-dev"
+# Alternative package names to check
+ALTERNATIVE_NAMES=(
+    "libplasma6-dev:libplasma-dev:plasma-framework-dev"
+    "libkirigami2-6:libkirigami-dev:kirigami2-dev"
+    "libkcmutils6:libkcmutils-dev:kcmutils-dev"
 )
+
 
 MISSING_PACKAGES=()
 for package in "${REQUIRED_PACKAGES[@]}"; do
     # Check if package is installed (handle different naming)
     INSTALLED=false
+    INSTALLED_NAME=""
+    
+    # Try primary name
     if dpkg -l | grep -q "^ii.*$package"; then
         INSTALLED=true
+        INSTALLED_NAME="$package"
     else
-        # Try alternative names
+        # Try alternative names based on package
         case "$package" in
-            "libplasma-dev")
-                if dpkg -l | grep -qE "^ii.*libplasma|^ii.*libkf6.*plasma"; then
-                    INSTALLED=true
-                fi
+            "libplasma6-dev")
+                for alt in libplasma-dev libplasma6 plasma-framework-dev libkf6plasma-dev; do
+                    if dpkg -l | grep -qE "^ii.*$alt"; then
+                        INSTALLED=true
+                        INSTALLED_NAME="$alt"
+                        break
+                    fi
+                done
                 ;;
-            "libkirigami-dev")
-                if dpkg -l | grep -qE "^ii.*libkirigami|^ii.*libkf6.*kirigami"; then
-                    INSTALLED=true
-                fi
+            "libkirigami2-6")
+                for alt in libkirigami-dev libkirigami2 kirigami2-dev libkf6kirigami2-dev; do
+                    if dpkg -l | grep -qE "^ii.*$alt"; then
+                        INSTALLED=true
+                        INSTALLED_NAME="$alt"
+                        break
+                    fi
+                done
                 ;;
-            "libkcmutils-dev")
-                if dpkg -l | grep -qE "^ii.*libkcmutils|^ii.*libkf6.*kcmutils"; then
-                    INSTALLED=true
-                fi
+            "libkcmutils6")
+                for alt in libkcmutils-dev libkcmutils kcmutils-dev libkf6kcmutils-dev; do
+                    if dpkg -l | grep -qE "^ii.*$alt"; then
+                        INSTALLED=true
+                        INSTALLED_NAME="$alt"
+                        break
+                    fi
+                done
                 ;;
         esac
     fi
     
     if [ "$INSTALLED" = true ]; then
-        echo "   ✅ $package"
+        if [ -n "$INSTALLED_NAME" ] && [ "$INSTALLED_NAME" != "$package" ]; then
+            echo "   ✅ $package (found as: $INSTALLED_NAME)"
+        else
+            echo "   ✅ $package"
+        fi
     else
         echo "   ❌ $package (not installed)"
         MISSING_PACKAGES+=("$package")
@@ -159,10 +197,21 @@ if [ -z "$PLASMA_VERSION" ] || [ -z "$QT_VERSION" ] || [ ${#MISSING_PACKAGES[@]}
         echo "  sudo apt install qt6-base-dev"
     fi
     echo ""
-    echo "Note: On Ubuntu, package names may differ:"
-    echo "  - libkf6plasma-dev → libplasma-dev"
-    echo "  - libkf6kirigami2-dev → libkirigami-dev"
-    echo "  - libkf6kcmutils-dev → libkcmutils-dev"
+    echo "Note: On Ubuntu 25.04, package names may vary. Try:"
+    echo "  sudo apt install libplasma6-dev libkirigami2-6 libkcmutils6"
+    echo "  # OR alternatives:"
+    echo "  sudo apt install libplasma-dev libkirigami-dev libkcmutils-dev"
+    echo ""
+    echo "To find exact package names on your system, run:"
+    echo "  apt search plasma-framework | grep -i dev"
+    echo "  apt search kirigami | grep -i dev"
+    echo "  apt search kcmutils | grep -i dev"
+    echo ""
+    read -p "Show available packages now? (y/N): " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        search_packages
+    fi
 else
     echo "✅ All requirements are met!"
     echo "   You can proceed with installation."
