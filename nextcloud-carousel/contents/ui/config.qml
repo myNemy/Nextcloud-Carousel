@@ -18,6 +18,8 @@ Kirigami.FormLayout {
     property alias cfg_PhotoPath: photoPathField.text
     property alias cfg_SlideInterval: slideIntervalField.text
     property alias cfg_TransitionDuration: transitionDurationField.text
+    property alias cfg_TransitionEnabled: transitionEnabledCheckBox.checked
+    property alias cfg_TransitionRandom: transitionRandomCheckBox.checked
     property alias cfg_TransitionType: transitionTypeComboBox.currentIndex
     property alias cfg_RandomOrder: randomOrderComboBox.currentIndex
     property alias cfg_Blur: blurCheckBox.checked
@@ -68,6 +70,19 @@ Kirigami.FormLayout {
         }
     }
 
+    QtControls2.CheckBox {
+        id: transitionEnabledCheckBox
+        Kirigami.FormData.label: i18n("Transitions:")
+        text: i18n("Enable transitions between images")
+    }
+
+    QtControls2.CheckBox {
+        id: transitionRandomCheckBox
+        Kirigami.FormData.label: i18n("")
+        text: i18n("Randomize transition type")
+        enabled: transitionEnabledCheckBox.checked
+    }
+
     QtControls2.ComboBox {
         id: transitionTypeComboBox
         Kirigami.FormData.label: i18n("Transition Type:")
@@ -77,6 +92,7 @@ Kirigami.FormLayout {
             i18n("Zoom")
         ]
         currentIndex: wallpaper.configuration.TransitionType || 0
+        enabled: transitionEnabledCheckBox.checked && !transitionRandomCheckBox.checked
     }
 
     QtControls2.ComboBox {

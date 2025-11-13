@@ -338,8 +338,18 @@ WallpaperItem {
                             imageStack.pendingImage = null
                         }
                         
-                        // Determine if we should skip animation (first image or explicit skip)
-                        imageStack.doesSkipAnimation = (imageStack.currentItem === undefined) || !!skipAnimation
+                        // Determine if we should skip animation (first image, explicit skip, or transitions disabled)
+                        imageStack.doesSkipAnimation = (imageStack.currentItem === undefined) || !!skipAnimation || !root.configuration.TransitionEnabled
+                        
+                        // Determine transition type (random or fixed)
+                        if (root.configuration.TransitionEnabled && root.configuration.TransitionRandom) {
+                            // Randomize transition type (0=Fade, 1=Slide, 2=Zoom)
+                            imageStack.transitionType = Math.floor(Math.random() * 3)
+                            console.log("Random transition type selected:", imageStack.transitionType, "(0=Fade, 1=Slide, 2=Zoom)")
+                        } else {
+                            // Use fixed transition type from configuration
+                            imageStack.transitionType = root.configuration.TransitionType || 0
+                        }
                         
                         // Create image component in background (following KDE pattern)
                         var component = imageStack.imageComponent
@@ -347,7 +357,13 @@ WallpaperItem {
                         if (component && component.status === Component.Ready) {
                             console.log("Creating image component with data URL")
                             console.log("StackView dimensions:", imageStack.width, "x", imageStack.height)
+                            console.log("Transition enabled:", root.configuration.TransitionEnabled)
+                            console.log("Transition random:", root.configuration.TransitionRandom)
+                            console.log("Transition type:", imageStack.transitionType, "(0=Fade, 1=Slide, 2=Zoom)")
                             // Create with explicit dimensions to avoid size issues
+                            // Set initial position/scale based on transition type
+                            var initialX = (imageStack.transitionType === 1) ? imageStack.width : 0
+                            var initialScale = (imageStack.transitionType === 2) ? 0.8 : 1.0
                             imageStack.pendingImage = component.createObject(imageStack, {
                                 "source": dataUrl,
                                 "fillMode": root.configuration.FillMode,
@@ -356,7 +372,9 @@ WallpaperItem {
                                 "blurOpacity": root.configuration.BlurOpacity,
                                 "imageScale": root.configuration.ImageScale,
                                 "width": imageStack.width,
-                                "height": imageStack.height
+                                "height": imageStack.height,
+                                "x": initialX,
+                                "scale": initialScale
                             })
                             
                             if (imageStack.pendingImage) {
@@ -435,8 +453,9 @@ WallpaperItem {
             
             // Properties for transition configuration
             property int transitionDuration: root.configuration.TransitionDuration || 1000
-            property int transitionType: root.configuration.TransitionType || 0
-            property bool doesSkipAnimation: true
+            property int transitionType: 0  // Will be set based on TransitionRandom or TransitionType
+            // Skip animation if transitions are disabled or if it's the first image
+            property bool doesSkipAnimation: !root.configuration.TransitionEnabled || (currentItem === undefined)
             
             // Pending image (loaded in background before replacing)
             property Item pendingImage: null
@@ -465,28 +484,76 @@ WallpaperItem {
             }
             
             // Transition configuration based on TransitionType
-            // Note: Following KDE pattern - simple fade for now (like org.kde.slideshow)
-            // Complex transitions (Slide/Zoom) will be implemented later using a different approach
+            // Following KDE pattern with support for Fade, Slide, and Zoom transitions
+            // Note: Cannot use conditional animations inside Transition
+            // Solution: Set initial properties in ImageComponent based on transitionType, then animate all properties
             replaceEnter: Transition {
                 id: replaceEnterTransition
                 enabled: !imageStack.doesSkipAnimation
                 
-                // Fade transition (always active when transition enabled)
-                OpacityAnimator {
-                    id: replaceEnterOpacityAnimator
-                    from: 0
-                    to: 1
-                    duration: imageStack.transitionDuration
+                // Parallel animation for combining multiple effects
+                ParallelAnimation {
+                    // Fade transition (always active for all types)
+                    OpacityAnimator {
+                        id: replaceEnterOpacityAnimator
+                        from: 0
+                        to: 1
+                        duration: imageStack.transitionDuration
+                    }
+                    
+                    // Slide transition (type 1) - horizontal slide in from right
+                    // Animate x only if transition type is Slide (initial x set in ImageComponent)
+                    PropertyAnimation {
+                        property: "x"
+                        from: imageStack.transitionType === 1 ? imageStack.width : 0
+                        to: 0
+                        duration: imageStack.transitionDuration
+                    }
+                    
+                    // Zoom transition (type 2) - zoom in from 0.8 to 1.0
+                    // Animate scale only if transition type is Zoom (initial scale set in ImageComponent)
+                    PropertyAnimation {
+                        property: "scale"
+                        from: imageStack.transitionType === 2 ? 0.8 : 1.0
+                        to: 1.0
+                        duration: imageStack.transitionDuration
+                    }
                 }
             }
             
             // Keep old image until new one is fully visible (prevents background showing through)
             // Following KDE pattern: PauseAnimation keeps old image visible during enter transition
             replaceExit: Transition {
-                // Pause to keep old image visible during enter transition
-                PauseAnimation {
-                    // 100ms buffer to ensure smooth transition
-                    duration: replaceEnterOpacityAnimator.duration + 100
+                // Parallel animation for exit effects
+                ParallelAnimation {
+                    // Pause to keep old image visible during enter transition
+                    PauseAnimation {
+                        // 100ms buffer to ensure smooth transition
+                        duration: replaceEnterOpacityAnimator.duration + 100
+                    }
+                    
+                    // Fade out old image (always active)
+                    OpacityAnimator {
+                        from: 1
+                        to: 0
+                        duration: imageStack.transitionDuration
+                    }
+                    
+                    // Slide out (type 1) - horizontal slide out to left
+                    PropertyAnimation {
+                        property: "x"
+                        from: 0
+                        to: imageStack.transitionType === 1 ? -imageStack.width : 0
+                        duration: imageStack.transitionDuration
+                    }
+                    
+                    // Zoom out (type 2) - zoom out from 1.0 to 1.2
+                    PropertyAnimation {
+                        property: "scale"
+                        from: 1.0
+                        to: imageStack.transitionType === 2 ? 1.2 : 1.0
+                        duration: imageStack.transitionDuration
+                    }
                 }
             }
             
@@ -613,10 +680,21 @@ WallpaperItem {
             console.log("Image scale changed:", root.configuration.ImageScale, "%")
             // Settings will be applied to next image via ImageComponent
         }
-        function onTransitionTypeChanged() {
-            console.log("Transition type changed:", root.configuration.TransitionType)
-            imageStack.transitionType = root.configuration.TransitionType || 0
-        }
+            function onTransitionEnabledChanged() {
+                console.log("Transition enabled changed:", root.configuration.TransitionEnabled)
+                imageStack.doesSkipAnimation = !root.configuration.TransitionEnabled
+            }
+            function onTransitionRandomChanged() {
+                console.log("Transition random changed:", root.configuration.TransitionRandom)
+                // Transition type will be determined on next image load
+            }
+            function onTransitionTypeChanged() {
+                console.log("Transition type changed:", root.configuration.TransitionType, "(0=Fade, 1=Slide, 2=Zoom)")
+                // Only update if random is disabled
+                if (!root.configuration.TransitionRandom) {
+                    imageStack.transitionType = root.configuration.TransitionType || 0
+                }
+            }
         function onTransitionDurationChanged() {
             console.log("Transition duration changed:", root.configuration.TransitionDuration, "ms")
             imageStack.transitionDuration = root.configuration.TransitionDuration || 1000

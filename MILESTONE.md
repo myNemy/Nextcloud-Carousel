@@ -89,7 +89,9 @@ The Nextcloud Carousel plugin has reached a working base with the following feat
 
 4. **Display**
    - ✅ Configurable background color
-   - ✅ **Transitions IMPLEMENTED** - Fade transitions working using StackView (KDE official pattern)
+   - ✅ **Transitions FULLY IMPLEMENTED** - Fade, Slide, and Zoom transitions working using StackView (KDE official pattern)
+   - ✅ Transition enable/disable control
+   - ✅ Transition randomization (random type per image)
    - ✅ FillMode implemented (Stretch, Fit, Crop, Tile) - backend + UI
    - ✅ Blur implemented - simplified (opacity reduction, not true blur) - backend + UI
    - ✅ ImageScale implemented - backend + UI
@@ -115,11 +117,25 @@ All major settings are now implemented in both backend and UI. The following are
    - Default: 1000ms
    - Range: 100-10000ms
 
-2. **TransitionType** - ✅ UI COMPLETE - Backend partially implemented
-   - UI fully implemented (ComboBox with Fade/Slide/Zoom options)
-   - Backend: Fade transition working, Slide and Zoom pending
-   - Current implementation uses StackView with OpacityAnimator (KDE pattern)
-   - Slide and Zoom transitions will be implemented in future updates
+2. **TransitionEnabled** - ✅ COMPLETE
+   - Fully implemented in UI and backend
+   - CheckBox to enable/disable transitions
+   - When disabled, images change instantly without animation
+   - Default: true
+
+3. **TransitionRandom** - ✅ COMPLETE
+   - Fully implemented in UI and backend
+   - CheckBox to randomize transition type
+   - When enabled, randomly selects Fade/Slide/Zoom for each image
+   - Enabled only when transitions are enabled
+   - Default: false
+
+4. **TransitionType** - ✅ COMPLETE
+   - Fully implemented in UI and backend
+   - ComboBox with Fade/Slide/Zoom options
+   - Used when TransitionRandom is disabled
+   - All three transition types (Fade, Slide, Zoom) working
+   - Default: 0 (Fade)
 
 3. **Blur** - Enable/disable blur effect with adjustable opacity
    - **Complexity:** Low-Medium - Checkbox + Slider
@@ -310,26 +326,36 @@ To implement actual image transitions, the following is required:
 
 **Transition System Implementation (StackView - KDE Official Pattern)**
 - **Started:** 2024-11-13
-- **Completed:** 2024-11-13 (Fade transition)
-- **Status:** ✅ FADE TRANSITION WORKING
+- **Completed:** 2024-11-13 (All transitions working)
+- **Status:** ✅ ALL TRANSITIONS WORKING (Fade, Slide, Zoom)
 - **Implementation:**
   - ✅ Created ImageComponent.qml following KDE StaticImageComponent pattern
   - ✅ Modified main.qml to use StackView with replace() method
   - ✅ Implemented pendingImage pattern (load in background before replacing)
   - ✅ Implemented replaceWhenLoaded() function following KDE pattern
-  - ✅ Configured replaceEnter and replaceExit transitions with OpacityAnimator
-  - ✅ Fixed animator property errors (removed XAnimator/ScaleAnimator with running: from Transition)
-  - ✅ Images now visible and transitions working
+  - ✅ Configured replaceEnter and replaceExit transitions with ParallelAnimation
+  - ✅ Implemented Fade transition using OpacityAnimator
+  - ✅ Implemented Slide transition using PropertyAnimation on x property
+  - ✅ Implemented Zoom transition using PropertyAnimation on scale property
+  - ✅ Fixed animator property errors (cannot use running: in PropertyAnimation inside Transition)
+  - ✅ Images now visible and all transitions working
+  - ✅ Added TransitionEnabled setting to enable/disable transitions
+  - ✅ Added TransitionRandom setting to randomize transition type
 - **Technical details:**
   - Uses QQC2.StackView with replace() method (not push/pop)
-  - replaceEnter: OpacityAnimator (fade in from 0 to 1)
-  - replaceExit: PauseAnimation (keeps old image visible during enter transition)
+  - replaceEnter: ParallelAnimation with OpacityAnimator, PropertyAnimation (x), PropertyAnimation (scale)
+  - replaceExit: ParallelAnimation with PauseAnimation, OpacityAnimator, PropertyAnimation (x), PropertyAnimation (scale)
+  - Transition type determined by TransitionRandom (random) or TransitionType (fixed)
+  - Initial position/scale set in ImageComponent based on transition type
   - Transition duration controlled by TransitionDuration setting
   - Following official KDE pattern from org.kde.slideshow plugin
-  - Slide and Zoom transitions will be implemented later using a different approach
+  - All three transition types (Fade, Slide, Zoom) fully functional
 - **Files modified:**
   - Created: nextcloud-carousel/contents/ui/ImageComponent.qml
   - Modified: nextcloud-carousel/contents/ui/main.qml (StackView implementation)
+  - Modified: nextcloud-carousel/contents/config/main.xml (added TransitionEnabled, TransitionRandom)
+  - Modified: nextcloud-carousel/contents/ui/config.qml (added UI controls)
+  - Modified: nextcloud-carousel/contents/locale/it/LC_MESSAGES/org.nextcloud.carousel.po (added translations)
 
 **Bug Fix: Animator Property Error (Qt 6 Compatibility)**
 - **Date:** 2024-11-13
@@ -358,22 +384,26 @@ To implement actual image transitions, the following is required:
 2. ✅ Add FillMode and ImageScale to configuration interface (COMPLETE)
 3. ✅ Add TransitionDuration to configuration interface (COMPLETE)
 4. ✅ Add TransitionType to configuration interface (COMPLETE)
-5. ✅ Implement transition system in backend - Fade working (COMPLETE)
-6. 🔄 Implement Slide and Zoom transitions (pending - will use different approach)
-7. Improve validation and user feedback
-8. Add settings preview
+5. ✅ Implement transition system in backend - All transitions working (COMPLETE)
+6. ✅ Implement Slide and Zoom transitions (COMPLETE)
+7. ✅ Add TransitionEnabled and TransitionRandom settings (COMPLETE)
+8. Improve validation and user feedback
+9. Add settings preview
 8. Optimize performance for large photo collections
 
 ## 🎯 What Needs to Be Done Now
 
-### ✅ Transition System - COMPLETED (Fade working)
+### ✅ Transition System - COMPLETED (All transitions working)
 
 The transition system has been successfully implemented using the KDE official StackView pattern:
 - ✅ ImageComponent.qml created
 - ✅ StackView with replace() method working
 - ✅ Fade transitions working
+- ✅ Slide transitions working
+- ✅ Zoom transitions working
+- ✅ Transition enable/disable control
+- ✅ Transition randomization (random type per image)
 - ✅ Images visible and displaying correctly
-- 🔄 Slide and Zoom transitions pending (will be implemented in future update)
 
 ### Current Situation
 
@@ -382,10 +412,11 @@ The transition system has been successfully implemented using the KDE official S
 - All settings are saved correctly in configuration
 - Plugin works and displays images correctly
 
-**❌ MISSING:**
-- ✅ **Visual transitions between images** - Fade transitions working
+**✅ COMPLETED:**
+- ✅ **Visual transitions between images** - All transitions (Fade, Slide, Zoom) working
 - ✅ The `TransitionType` and `TransitionDuration` settings are now used in the backend
-- 🔄 Slide and Zoom transitions pending (Fade is working)
+- ✅ `TransitionEnabled` setting to enable/disable transitions
+- ✅ `TransitionRandom` setting to randomize transition type
 
 ### The Problem
 
@@ -399,7 +430,9 @@ Currently, when an image changes:
 **What's in the code but NOT USED:**
 - ✅ `StackView` is now used with replace() method
 - ✅ `ImageComponent.qml` created and used for image display
-- ✅ `TransitionType` setting is read and used (Fade working, Slide/Zoom pending)
+- ✅ `TransitionType` setting is read and used (all types working: Fade, Slide, Zoom)
+- ✅ `TransitionEnabled` setting to control transitions on/off
+- ✅ `TransitionRandom` setting to randomize transition type per image
 
 ### Solution: Implement Transition System
 

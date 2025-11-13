@@ -20,6 +20,16 @@ Item {
     width: parent ? parent.width : 0
     height: parent ? parent.height : 0
     
+    // Initial position for Slide transition (will be animated by StackView transition)
+    // Default to 0 (normal position), will be set by transition if needed
+    x: 0
+    y: 0
+    
+    // Initial scale for Zoom transition (will be animated by StackView transition)
+    // Default to 1.0 (normal scale), will be set by transition if needed
+    scale: 1.0
+    transformOrigin: Item.Center
+    
     // Required properties (set when creating component)
     required property url source
     required property int fillMode

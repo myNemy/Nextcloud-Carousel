@@ -52,6 +52,15 @@ msgstr "Durata transizione (ms):"
 msgid "1000"
 msgstr "1000"
 
+msgid "Transitions:"
+msgstr "Transizioni:"
+
+msgid "Enable transitions between images"
+msgstr "Abilita transizioni tra le immagini"
+
+msgid "Randomize transition type"
+msgstr "Randomizza il tipo di transizione"
+
 msgid "Transition Type:"
 msgstr "Tipo transizione:"
 
