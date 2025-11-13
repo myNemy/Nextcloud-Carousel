@@ -101,6 +101,7 @@ The Nextcloud Carousel plugin has reached a working base with the following feat
    - ✅ Working configuration UI
    - ✅ Multilingual support (EN/IT)
    - ✅ Input validation
+   - ✅ Loading indicator visibility control (show/hide)
 
 6. **System**
    - ✅ Automated installation/uninstallation
@@ -391,9 +392,10 @@ To implement actual image transitions, the following is required:
 6. ✅ Implement Slide and Zoom transitions (COMPLETE)
 7. ✅ Add TransitionEnabled and TransitionRandom settings (COMPLETE)
 8. ✅ Implement automatic EXIF orientation detection and rotation (COMPLETE)
-9. Improve validation and user feedback
-10. Add settings preview
-11. Optimize performance for large photo collections
+9. ✅ Add loading indicator visibility control (COMPLETE)
+10. Improve validation and user feedback
+11. Add settings preview
+12. Optimize performance for large photo collections
 
 ## 🎯 What Needs to Be Done Now
 
@@ -740,7 +742,6 @@ If implementing transitions is too complex right now, we can focus on:
 - **A)** Optimize performance (preload, cache, optimize WebDAV requests)
 - **B)** Add settings preview (live preview of settings changes)
 - **C)** Add photo information display (EXIF data, filename, path, date/time)
-- **D)** Add automatic orientation detection
 
 ## 🔮 Planned Features
 
