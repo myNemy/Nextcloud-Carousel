@@ -248,18 +248,25 @@ WallpaperItem {
                 console.log("Loading video", currentIndex + 1, "of", videoList.length)
                 console.log("Video URL (without auth):", videoUrl.replace(/https?:\/\/[^@]+@/, ""))
                 
-                // Stop current video if playing
-                if (mediaPlayer.playbackState === MediaPlayer.PlayingState) {
+                // Stop and cleanup current video for better memory management
+                if (mediaPlayer.playbackState !== MediaPlayer.StoppedState) {
                     mediaPlayer.stop()
                 }
                 
-                // Show loading indicator
-                root.loading = true
-                console.log("Loading indicator shown, waiting for video to start playing...")
+                // Clear source to release previous video buffer
+                // This helps prevent memory accumulation when switching videos
+                mediaPlayer.source = ""
                 
-                // MediaPlayer supports Basic Auth in URL directly
-                mediaPlayer.source = videoUrl
-                mediaPlayer.play()
+                // Small delay to allow cleanup (Qt.callLater ensures it happens after current execution)
+                Qt.callLater(function() {
+                    // Show loading indicator
+                    root.loading = true
+                    console.log("Loading indicator shown, waiting for video to start playing...")
+                    
+                    // MediaPlayer supports Basic Auth in URL directly
+                    mediaPlayer.source = videoUrl
+                    mediaPlayer.play()
+                })
             }
         }
     }
