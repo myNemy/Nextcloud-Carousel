@@ -42,6 +42,12 @@
       <label>Blur background filling</label>
       <default>false</default>
     </entry>
+    <entry name="BlurOpacity" type="int">
+      <label>Blur opacity percentage (0-100, lower = more transparent)</label>
+      <default>75</default>
+      <min>0</min>
+      <max>100</max>
+    </entry>
     <entry name="Color" type="Color">
       <label>Background color</label>
       <default>#000000</default>

@@ -67,3 +67,15 @@ msgstr "Colore sfondo:"
 msgid "Select Background Color"
 msgstr "Seleziona colore sfondo"
 
+msgid "Blur background:"
+msgstr "Sfocatura sfondo:"
+
+msgid "Apply blur effect to images"
+msgstr "Applica effetto sfocatura alle immagini"
+
+msgid "Blur opacity (%):"
+msgstr "Opacità sfocatura (%):"
+
+msgid "Lower values make images more transparent (0 = fully transparent, 100 = fully opaque)"
+msgstr "Valori più bassi rendono le immagini più trasparenti (0 = completamente trasparente, 100 = completamente opaco)"
+

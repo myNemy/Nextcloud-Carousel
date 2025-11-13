@@ -417,7 +417,9 @@ WallpaperItem {
             
             // Blur effect - simplified for now
             // Note: Full blur effect would require additional QML components
-            opacity: root.configuration.Blur ? 0.9 : 1.0
+            // Using opacity reduction as simplified blur effect
+            // BlurOpacity is 0-100, convert to 0.0-1.0
+            opacity: root.configuration.Blur ? (root.configuration.BlurOpacity / 100.0) : 1.0
             
             // Fade transition
             Behavior on opacity {
@@ -453,6 +455,18 @@ WallpaperItem {
         function onPhotoPathChanged() { carouselController.initialize() }
         function onSlideIntervalChanged() { 
             carouselTimer.interval = root.configuration.SlideInterval * 1000
+        }
+        function onBlurChanged() {
+            console.log("Blur setting changed:", root.configuration.Blur)
+            // Force opacity update
+            imageView.opacity = root.configuration.Blur ? (root.configuration.BlurOpacity / 100.0) : 1.0
+        }
+        function onBlurOpacityChanged() {
+            console.log("Blur opacity changed:", root.configuration.BlurOpacity, "%")
+            // Force opacity update if blur is enabled
+            if (root.configuration.Blur) {
+                imageView.opacity = root.configuration.BlurOpacity / 100.0
+            }
         }
     }
 }

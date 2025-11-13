@@ -89,9 +89,9 @@ The Nextcloud Carousel plugin has reached a working base with the following feat
 
 4. **Display**
    - ✅ Configurable background color
-   - ✅ Transitions implemented (Fade, Slide, Zoom) - backend
+   - ⚠️ Transitions partially implemented - StackView defined but not used, only direct image change
    - ✅ FillMode implemented (Stretch, Fit, Crop, Tile) - backend
-   - ✅ Blur implemented - backend
+   - ⚠️ Blur implemented - simplified (opacity reduction, not true blur) - backend
 
 5. **Interface**
    - ✅ Working configuration UI
@@ -109,16 +109,105 @@ The Nextcloud Carousel plugin has reached a working base with the following feat
 The following settings are implemented in the backend (`main.qml`) but are not yet configurable in the user interface (`config.qml`):
 
 1. **TransitionDuration** - Transition animation duration (ms)
+   - **Complexity:** Low - Simple integer input field
+   - **Current behavior:** Controls fade transition duration (default: 1000ms)
+
 2. **TransitionType** - Transition type (Fade/Slide/Zoom)
-3. **Blur** - Enable/disable blur effect
+   - **Complexity:** Medium - Requires implementing actual transitions
+   - **Current behavior:** NOT IMPLEMENTED - Only direct image change without animation
+   - **Current state:**
+     - StackView is defined with pushEnter/pushExit transitions but NOT USED
+     - Images are loaded directly into Image component, changing source instantly
+     - Only opacity fade exists (for blur effect, not for transitions)
+     - Slide and Zoom transitions are not implemented
+   - **What needs to be done:**
+     - Implement proper transition system using StackView or multiple Image layers
+     - Add Fade transition (opacity 0→1)
+     - Add Slide transition (horizontal/vertical movement)
+     - Add Zoom transition (scale animation)
+     - Apply transition based on TransitionType setting
+
+3. **Blur** - Enable/disable blur effect with adjustable opacity
+   - **Complexity:** Low-Medium - Checkbox + Slider
+   - **Status:** ✅ COMPLETE - Fully implemented in UI
+   - **Current behavior:** 
+     - Checkbox to enable/disable blur effect
+     - Slider to adjust opacity percentage (0-100%)
+     - Simplified implementation - reduces image opacity based on BlurOpacity setting (not a true blur effect)
+     - Default opacity: 75% (0.75)
+   - **Note:** Full blur effect would require additional QML components (FastBlur, GaussianBlur, or shader effects)
+   - **When used:** Applied to the main image display when `root.configuration.Blur` is true
+   - **UI Components:**
+     - CheckBox for enable/disable
+     - Slider (0-100%) with label showing current value
+     - Slider disabled when blur is off
+
 4. **FillMode** - Image fill mode (Stretch/Fit/Crop/Tile)
+   - **Complexity:** Medium - ComboBox with 6 options + translations
+   - **Current behavior:** FULLY IMPLEMENTED in backend - Works correctly
+   - **Implementation details:**
+     - Switch statement in main.qml (lines 403-413) maps values 0-5 to Image.FillMode
+     - Applied directly to Image component
+     - Default: 2 (Image.PreserveAspectCrop)
+   - **Available options:**
+     - 0 = Image.Stretch (stretch to fill, may distort)
+     - 1 = Image.PreserveAspectFit (maintain aspect ratio, all visible, may have borders)
+     - 2 = Image.PreserveAspectCrop (maintain aspect ratio, fill screen, may crop)
+     - 3 = Image.Tile (tile pattern)
+     - 4 = Image.TileVertically (tile vertically)
+     - 5 = Image.TileHorizontally (tile horizontally)
+   - **What's missing:** Only ComboBox in config.qml to make it user-configurable
+
+## 🚧 Development Status
+
+### Completed
+
+**Blur Setting (UI Implementation)**
+- **Started:** 2024-11-13
+- **Completed:** 2024-11-13
+- **Status:** ✅ COMPLETE
+- **Implementation:**
+  - ✅ Backend implemented (opacity reduction based on BlurOpacity percentage)
+  - ✅ CheckBox added to config.qml for enable/disable
+  - ✅ Slider added for opacity control (0-100%)
+  - ✅ Translation strings added (EN/IT)
+  - ✅ Property aliases configured (cfg_Blur, cfg_BlurOpacity)
+  - ✅ Handler onBlurChanged and onBlurOpacityChanged implemented
+  - ✅ Opacity value: BlurOpacity/100.0 (default: 75% = 0.75)
+- **Note:** Simplified implementation (opacity reduction, not true blur effect)
+- **Technical details:**
+  - Used Slider instead of SpinBox for better Qt6 compatibility
+  - Slider range: 0-100% with 5% step size
+  - Default opacity: 75% (more visible than initial 90%)
+  - Slider disabled when blur checkbox is off
 
 ## 📝 Next Steps
 
-1. Add missing settings to the configuration interface
-2. Improve validation and user feedback
-3. Add settings preview
-4. Optimize performance for large photo collections
+1. ✅ Add Blur setting to configuration interface (COMPLETE)
+2. Add remaining missing settings to the configuration interface:
+   - TransitionDuration
+   - TransitionType
+   - FillMode
+3. Improve validation and user feedback
+4. Add settings preview
+5. Optimize performance for large photo collections
+
+## 🔮 Planned Features
+
+### Photo Information Display
+- **EXIF Data Extraction:**
+  - Photo name/filename
+  - Folder/path information
+  - Location (GPS coordinates if available)
+  - Date and time (from EXIF)
+  - Full EXIF metadata access
+
+### Automatic Orientation
+- **Smart Orientation Detection:**
+  - Automatic horizontal/vertical detection
+  - Rotation based on EXIF orientation data
+  - Optimal display based on image aspect ratio
+  - Support for portrait and landscape modes
 
 ## 🎯 Objective
 

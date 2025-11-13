@@ -18,6 +18,8 @@ Kirigami.FormLayout {
     property alias cfg_PhotoPath: photoPathField.text
     property alias cfg_SlideInterval: slideIntervalField.text
     property alias cfg_RandomOrder: randomOrderComboBox.currentIndex
+    property alias cfg_Blur: blurCheckBox.checked
+    property alias cfg_BlurOpacity: blurOpacitySlider.value
     property alias cfg_Color: colorButton.color
     property alias formLayout: root
 
@@ -62,6 +64,39 @@ Kirigami.FormLayout {
             i18n("Smart Random (avoid repeats)")
         ]
         currentIndex: wallpaper.configuration.RandomOrder || 0
+    }
+
+    QtControls2.CheckBox {
+        id: blurCheckBox
+        Kirigami.FormData.label: i18n("Blur background:")
+        text: i18n("Apply blur effect to images")
+    }
+
+    Item {
+        Kirigami.FormData.label: i18n("Blur opacity (%):")
+        Kirigami.FormData.buddyFor: blurOpacitySlider
+        implicitHeight: blurOpacitySlider.implicitHeight
+        enabled: blurCheckBox.checked
+        
+        Row {
+            anchors.fill: parent
+            spacing: 10
+            
+            QtControls2.Slider {
+                id: blurOpacitySlider
+                from: 0
+                to: 100
+                stepSize: 5
+                value: wallpaper.configuration.BlurOpacity || 75
+                width: 200
+            }
+            
+            QtControls2.Label {
+                text: Math.round(blurOpacitySlider.value) + " %"
+                width: 50
+                horizontalAlignment: Text.AlignRight
+            }
+        }
     }
 
     KQuickControls.ColorButton {
