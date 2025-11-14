@@ -194,16 +194,13 @@ Kirigami.FormLayout {
     }
 
     // Information Section
-    Kirigami.Separator {
-        Layout.fillWidth: true
-        Layout.topMargin: Kirigami.Units.largeSpacing
-    }
-
     Item {
         Kirigami.FormData.label: i18n("About:")
-        Kirigami.FormData.isSection: true
+        Kirigami.FormData.buddyFor: aboutColumn
+        implicitHeight: aboutColumn.implicitHeight
         
         Column {
+            id: aboutColumn
             spacing: Kirigami.Units.smallSpacing
             width: parent.width
             
