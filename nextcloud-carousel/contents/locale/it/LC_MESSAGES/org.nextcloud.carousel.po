@@ -136,3 +136,15 @@ msgstr "Indicatore di caricamento:"
 msgid "Show loading indicator when loading images"
 msgstr "Mostra indicatore di caricamento durante il caricamento delle immagini"
 
+
+msgid "About:"
+msgstr "Informazioni:"
+
+msgid "Version: 1.0"
+msgstr "Versione: 1.0"
+
+msgid "License: GPL-2.0-or-later"
+msgstr "Licenza: GPL-2.0-or-later"
+
+msgid "Author: Nextcloud Carousel Developer"
+msgstr "Autore: Nextcloud Carousel Developer"
