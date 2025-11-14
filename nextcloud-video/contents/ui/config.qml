@@ -129,49 +129,5 @@ Kirigami.FormLayout {
             }
         }
     }
-
-    // Information Section
-    Item {
-        Kirigami.FormData.label: i18n("About:")
-        Kirigami.FormData.buddyFor: aboutColumn
-        implicitHeight: aboutColumn.implicitHeight
-        
-        Column {
-            id: aboutColumn
-            spacing: Kirigami.Units.smallSpacing
-            width: parent.width
-            
-            QtControls2.Label {
-                text: i18n("Nextcloud Video")
-                font.bold: true
-                font.pixelSize: Kirigami.Units.fontMetrics.font.pixelSize * 1.1
-            }
-            
-            QtControls2.Label {
-                text: i18n("Version: 1.0")
-                font.pixelSize: Kirigami.Units.fontMetrics.font.pixelSize * 0.9
-                color: Kirigami.Theme.disabledTextColor
-            }
-            
-            QtControls2.Label {
-                text: i18n("Video wallpaper plugin for displaying videos from Nextcloud")
-                wrapMode: Text.WordWrap
-                width: parent.width
-                font.pixelSize: Kirigami.Units.fontMetrics.font.pixelSize * 0.9
-            }
-            
-            QtControls2.Label {
-                text: i18n("License: GPL-2.0-or-later")
-                font.pixelSize: Kirigami.Units.fontMetrics.font.pixelSize * 0.9
-                color: Kirigami.Theme.disabledTextColor
-            }
-            
-            QtControls2.Label {
-                text: i18n("Author: Nextcloud Carousel Developer")
-                font.pixelSize: Kirigami.Units.fontMetrics.font.pixelSize * 0.9
-                color: Kirigami.Theme.disabledTextColor
-            }
-        }
-    }
 }
 
