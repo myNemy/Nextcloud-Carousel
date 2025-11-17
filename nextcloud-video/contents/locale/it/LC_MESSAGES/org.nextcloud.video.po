@@ -1,0 +1,189 @@
+# Italian translation for org.nextcloud.video
+# Copyright (C) 2024 Nextcloud Carousel Developer
+# This file is distributed under the same license as the org.nextcloud.video package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: org.nextcloud.video\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-01 00:00+0000\n"
+"PO-Revision-Date: 2024-01-01 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Italian\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: contents/ui/config.qml:31
+msgid "Nextcloud URL:"
+msgstr "URL Nextcloud:"
+
+#: contents/ui/config.qml:32
+msgid "https://nextcloud.example.com"
+msgstr "https://nextcloud.example.com"
+
+#: contents/ui/config.qml:35
+msgid "URL of your Nextcloud server (e.g., https://nextcloud.example.com)"
+msgstr "URL del tuo server Nextcloud (es. https://nextcloud.example.com)"
+
+#: contents/ui/config.qml:40
+msgid "Username:"
+msgstr "Nome utente:"
+
+#: contents/ui/config.qml:41
+msgid "Your Nextcloud username"
+msgstr "Il tuo nome utente Nextcloud"
+
+#: contents/ui/config.qml:44
+msgid "Your Nextcloud username for authentication"
+msgstr "Il tuo nome utente Nextcloud per l'autenticazione"
+
+#: contents/ui/config.qml:49
+msgid "Password:"
+msgstr "Password:"
+
+#: contents/ui/config.qml:50
+msgid "Password or app password"
+msgstr "Password o password app"
+
+#: contents/ui/config.qml:54
+msgid "Your Nextcloud password or app password (recommended for security)"
+msgstr "La tua password Nextcloud o password app (consigliata per la sicurezza)"
+
+#: contents/ui/config.qml:59
+msgid "Video Path:"
+msgstr "Percorso Video:"
+
+#: contents/ui/config.qml:60
+msgid "/Videos"
+msgstr "/Videos"
+
+#: contents/ui/config.qml:63
+msgid "Path to the video folder on Nextcloud (searches in subfolders too)"
+msgstr "Percorso alla cartella video su Nextcloud (cerca anche nelle sottocartelle)"
+
+#: contents/ui/config.qml:69
+msgid "Video Interval (seconds):"
+msgstr "Intervallo Video (secondi):"
+
+#: contents/ui/config.qml:70
+msgid "30"
+msgstr "30"
+
+#: contents/ui/config.qml:77
+msgid "Maximum time before switching to next video (if video ends earlier, switches immediately)"
+msgstr "Tempo massimo prima di passare al video successivo (se il video finisce prima, passa immediatamente)"
+
+#: contents/ui/config.qml:82
+msgid "Order Mode:"
+msgstr "Modalità Ordine:"
+
+#: contents/ui/config.qml:84
+msgid "Sequential"
+msgstr "Sequenziale"
+
+#: contents/ui/config.qml:85
+msgid "Random (each time)"
+msgstr "Casuale (ogni volta)"
+
+#: contents/ui/config.qml:86
+msgid "Shuffle Once"
+msgstr "Mescola Una Volta"
+
+#: contents/ui/config.qml:87
+msgid "Smart Random (avoid repeats)"
+msgstr "Casuale Intelligente (evita ripetizioni)"
+
+#: contents/ui/config.qml:92
+msgid "Sequential: in order | Random: random each time | Shuffle: shuffle once | Smart: avoids recent repeats"
+msgstr "Sequenziale: in ordine | Casuale: casuale ogni volta | Mescola: mescola una volta | Intelligente: evita ripetizioni recenti"
+
+#: contents/ui/config.qml:97
+msgid "Loop Video:"
+msgstr "Ripeti Video:"
+
+#: contents/ui/config.qml:98
+msgid "Loop each video"
+msgstr "Ripeti ogni video"
+
+#: contents/ui/config.qml:101
+msgid "If enabled, each video loops infinitely. If disabled, video plays completely then switches to next"
+msgstr "Se abilitato, ogni video viene ripetuto all'infinito. Se disabilitato, il video viene riprodotto completamente e poi passa al successivo"
+
+#: contents/ui/config.qml:106
+msgid "Mute Audio:"
+msgstr "Disattiva Audio:"
+
+#: contents/ui/config.qml:107
+msgid "Mute video audio"
+msgstr "Disattiva l'audio del video"
+
+#: contents/ui/config.qml:110
+msgid "Mute audio playback for all videos"
+msgstr "Disattiva la riproduzione audio per tutti i video"
+
+#: contents/ui/config.qml:116
+msgid "Background Color:"
+msgstr "Colore di Sfondo:"
+
+#: contents/ui/config.qml:119
+msgid "Background color shown while loading or if video doesn't fill screen"
+msgstr "Colore di sfondo mostrato durante il caricamento o se il video non riempie lo schermo"
+
+#: contents/ui/config.qml:124
+msgid "Fill Mode:"
+msgstr "Modalità Riempimento:"
+
+#: contents/ui/config.qml:126
+msgid "Stretch"
+msgstr "Allunga"
+
+#: contents/ui/config.qml:127
+msgid "Fit (Preserve Aspect)"
+msgstr "Adatta (Mantieni Proporzioni)"
+
+#: contents/ui/config.qml:128
+msgid "Crop (Preserve Aspect)"
+msgstr "Ritaglia (Mantieni Proporzioni)"
+
+#: contents/ui/config.qml:129
+msgid "Tile"
+msgstr "Piastrella"
+
+#: contents/ui/config.qml:130
+msgid "Tile Vertically"
+msgstr "Piastrella Verticalmente"
+
+#: contents/ui/config.qml:131
+msgid "Tile Horizontally"
+msgstr "Piastrella Orizzontalmente"
+
+#: contents/ui/config.qml:136
+msgid "How the video is displayed: Stretch fills screen, Fit preserves aspect, Crop fills without distortion, Tile repeats"
+msgstr "Come viene visualizzato il video: Allunga riempie lo schermo, Adatta mantiene le proporzioni, Ritaglia riempie senza distorsione, Piastrella ripete"
+
+#: contents/ui/config.qml:140
+msgid "Video Scale (%):"
+msgstr "Scala Video (%):"
+
+#: contents/ui/config.qml:155
+msgid "Scale video size (50% = half size, 100% = normal, 200% = double)"
+msgstr "Scala la dimensione del video (50% = metà dimensione, 100% = normale, 200% = doppio)"
+
+#: contents/ui/main.qml:544
+msgid "🔧 Optimizing memory..."
+msgstr "🔧 Ottimizzazione memoria..."
+
+#: contents/ui/main.qml:546
+msgid "Loading videos from Nextcloud..."
+msgstr "Caricamento video da Nextcloud..."
+
+#: contents/ui/main.qml:548
+msgid "Loading video %1 of %2..."
+msgstr "Caricamento video %1 di %2..."
+
+#: contents/ui/main.qml:550
+msgid "Loading video..."
+msgstr "Caricamento video..."
+

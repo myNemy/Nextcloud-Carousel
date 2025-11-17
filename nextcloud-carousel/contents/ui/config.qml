@@ -34,12 +34,18 @@ Kirigami.FormLayout {
         id: nextcloudUrlField
         Kirigami.FormData.label: i18n("Nextcloud URL:")
         placeholderText: i18n("https://nextcloud.example.com")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("URL of your Nextcloud server (e.g., https://nextcloud.example.com)")
     }
 
     QtControls2.TextField {
         id: usernameField
         Kirigami.FormData.label: i18n("Username:")
         placeholderText: i18n("Your Nextcloud username")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Your Nextcloud username for authentication")
     }
 
     QtControls2.TextField {
@@ -47,18 +53,27 @@ Kirigami.FormLayout {
         Kirigami.FormData.label: i18n("Password:")
         placeholderText: i18n("Password or app password")
         echoMode: QtControls2.TextField.Password
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Your Nextcloud password or app password (recommended for security)")
     }
 
     QtControls2.TextField {
         id: photoPathField
         Kirigami.FormData.label: i18n("Photo Path:")
         placeholderText: i18n("/Photos")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Path to the photo folder on Nextcloud (searches in subfolders too)")
     }
 
     QtControls2.TextField {
         id: slideIntervalField
         Kirigami.FormData.label: i18n("Slide Interval (seconds):")
         placeholderText: i18n("10")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Time each image is displayed before switching to the next")
     }
 
     QtControls2.TextField {
@@ -69,12 +84,18 @@ Kirigami.FormLayout {
             bottom: 100
             top: 10000
         }
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Duration of the transition effect between images (in milliseconds)")
     }
 
     QtControls2.CheckBox {
         id: transitionEnabledCheckBox
         Kirigami.FormData.label: i18n("Transitions:")
         text: i18n("Enable transitions between images")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Enable smooth transition effects (fade, slide, zoom) when switching between images")
     }
 
     QtControls2.CheckBox {
@@ -82,6 +103,9 @@ Kirigami.FormLayout {
         Kirigami.FormData.label: i18n("")
         text: i18n("Randomize transition type")
         enabled: transitionEnabledCheckBox.checked
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Randomly select a different transition type for each image change")
     }
 
     QtControls2.ComboBox {
@@ -94,6 +118,9 @@ Kirigami.FormLayout {
         ]
         currentIndex: wallpaper.configuration.TransitionType || 0
         enabled: transitionEnabledCheckBox.checked && !transitionRandomCheckBox.checked
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Type of transition: Fade (crossfade), Slide (horizontal movement), Zoom (scale effect)")
     }
 
     QtControls2.ComboBox {
@@ -106,12 +133,18 @@ Kirigami.FormLayout {
             i18n("Smart Random (avoid repeats)")
         ]
         currentIndex: wallpaper.configuration.RandomOrder || 0
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Sequential: in order | Random: random each time | Shuffle: shuffle once | Smart: avoids recent repeats")
     }
 
     QtControls2.CheckBox {
         id: blurCheckBox
         Kirigami.FormData.label: i18n("Blur background:")
         text: i18n("Apply blur effect to images")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Apply a blur effect to the images for a softer, artistic appearance")
     }
 
     Item {
@@ -131,6 +164,9 @@ Kirigami.FormLayout {
                 stepSize: 5
                 value: wallpaper.configuration.BlurOpacity || 75
                 width: 200
+                QtControls2.ToolTip.delay: 1000
+                QtControls2.ToolTip.visible: hovered
+                QtControls2.ToolTip.text: i18n("Opacity of the blur effect (0% = no blur, 100% = maximum blur)")
             }
             
             QtControls2.Label {
@@ -153,6 +189,9 @@ Kirigami.FormLayout {
             i18n("Tile Horizontally")
         ]
         currentIndex: wallpaper.configuration.FillMode || 2
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("How the image is displayed: Stretch fills screen, Fit preserves aspect, Crop fills without distortion, Tile repeats")
     }
 
     Item {
@@ -171,6 +210,9 @@ Kirigami.FormLayout {
                 stepSize: 5
                 value: wallpaper.configuration.ImageScale || 100
                 width: 200
+                QtControls2.ToolTip.delay: 1000
+                QtControls2.ToolTip.visible: hovered
+                QtControls2.ToolTip.text: i18n("Scale image size (50% = half size, 100% = normal, 200% = double)")
             }
             
             QtControls2.Label {
@@ -185,11 +227,17 @@ Kirigami.FormLayout {
         id: colorButton
         Kirigami.FormData.label: i18n("Background Color:")
         dialogTitle: i18n("Select Background Color")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Background color shown while loading or if image doesn't fill screen")
     }
 
     QtControls2.CheckBox {
         id: showLoadingIndicatorCheckBox
         Kirigami.FormData.label: i18n("Loading Indicator:")
         text: i18n("Show loading indicator when loading images")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Display a visual indicator while images are being loaded from Nextcloud")
     }
 }

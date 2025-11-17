@@ -30,12 +30,18 @@ Kirigami.FormLayout {
         id: nextcloudUrlField
         Kirigami.FormData.label: i18n("Nextcloud URL:")
         placeholderText: i18n("https://nextcloud.example.com")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("URL of your Nextcloud server (e.g., https://nextcloud.example.com)")
     }
 
     QtControls2.TextField {
         id: usernameField
         Kirigami.FormData.label: i18n("Username:")
         placeholderText: i18n("Your Nextcloud username")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Your Nextcloud username for authentication")
     }
 
     QtControls2.TextField {
@@ -43,12 +49,18 @@ Kirigami.FormLayout {
         Kirigami.FormData.label: i18n("Password:")
         placeholderText: i18n("Password or app password")
         echoMode: QtControls2.TextField.Password
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Your Nextcloud password or app password (recommended for security)")
     }
 
     QtControls2.TextField {
         id: videoPathField
         Kirigami.FormData.label: i18n("Video Path:")
         placeholderText: i18n("/Videos")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Path to the video folder on Nextcloud (searches in subfolders too)")
     }
 
     // Video Settings
@@ -60,6 +72,9 @@ Kirigami.FormLayout {
             bottom: 5
             top: 300
         }
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Maximum time before switching to next video (if video ends earlier, switches immediately)")
     }
 
     QtControls2.ComboBox {
@@ -72,24 +87,36 @@ Kirigami.FormLayout {
             i18n("Smart Random (avoid repeats)")
         ]
         currentIndex: wallpaper.configuration.RandomOrder || 0
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Sequential: in order | Random: random each time | Shuffle: shuffle once | Smart: avoids recent repeats")
     }
 
     QtControls2.CheckBox {
         id: loopVideoCheckBox
         Kirigami.FormData.label: i18n("Loop Video:")
         text: i18n("Loop each video")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("If enabled, each video loops infinitely. If disabled, video plays completely then switches to next")
     }
 
     QtControls2.CheckBox {
         id: muteAudioCheckBox
         Kirigami.FormData.label: i18n("Mute Audio:")
         text: i18n("Mute video audio")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Mute audio playback for all videos")
     }
 
     // Display Settings
     KQuickControls.ColorButton {
         id: colorButton
         Kirigami.FormData.label: i18n("Background Color:")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Background color shown while loading or if video doesn't fill screen")
     }
 
     QtControls2.ComboBox {
@@ -104,6 +131,9 @@ Kirigami.FormLayout {
             i18n("Tile Horizontally")
         ]
         currentIndex: wallpaper.configuration.FillMode || 2
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("How the video is displayed: Stretch fills screen, Fit preserves aspect, Crop fills without distortion, Tile repeats")
     }
 
     Item {
@@ -120,6 +150,9 @@ Kirigami.FormLayout {
                 to: 200
                 stepSize: 5
                 value: wallpaper.configuration.VideoScale || 100
+                QtControls2.ToolTip.delay: 1000
+                QtControls2.ToolTip.visible: hovered
+                QtControls2.ToolTip.text: i18n("Scale video size (50% = half size, 100% = normal, 200% = double)")
             }
             
             QtControls2.Label {

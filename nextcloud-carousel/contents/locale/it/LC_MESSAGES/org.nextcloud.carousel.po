@@ -1,10 +1,10 @@
-# Translation file for Nextcloud Carousel
+# Italian translation for org.nextcloud.carousel
 # Copyright (C) 2024 Nextcloud Carousel Developer
-# This file is distributed under the same license as the nextcloud-carousel package.
+# This file is distributed under the same license as the org.nextcloud.carousel package.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: nextcloud-carousel\n"
+"Project-Id-Version: org.nextcloud.carousel\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2024-01-01 00:00+0000\n"
 "PO-Revision-Date: 2024-01-01 00:00+0000\n"
@@ -14,137 +14,224 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+#: contents/ui/config.qml:35
 msgid "Nextcloud URL:"
 msgstr "URL Nextcloud:"
 
+#: contents/ui/config.qml:36
 msgid "https://nextcloud.example.com"
 msgstr "https://nextcloud.example.com"
 
+#: contents/ui/config.qml:39
+msgid "URL of your Nextcloud server (e.g., https://nextcloud.example.com)"
+msgstr "URL del tuo server Nextcloud (es. https://nextcloud.example.com)"
+
+#: contents/ui/config.qml:44
 msgid "Username:"
 msgstr "Nome utente:"
 
+#: contents/ui/config.qml:45
 msgid "Your Nextcloud username"
 msgstr "Il tuo nome utente Nextcloud"
 
+#: contents/ui/config.qml:48
+msgid "Your Nextcloud username for authentication"
+msgstr "Il tuo nome utente Nextcloud per l'autenticazione"
+
+#: contents/ui/config.qml:53
 msgid "Password:"
 msgstr "Password:"
 
+#: contents/ui/config.qml:54
 msgid "Password or app password"
-msgstr "Password o app password"
+msgstr "Password o password app"
 
+#: contents/ui/config.qml:58
+msgid "Your Nextcloud password or app password (recommended for security)"
+msgstr "La tua password Nextcloud o password app (consigliata per la sicurezza)"
+
+#: contents/ui/config.qml:63
 msgid "Photo Path:"
-msgstr "Percorso foto:"
+msgstr "Percorso Foto:"
 
+#: contents/ui/config.qml:64
 msgid "/Photos"
 msgstr "/Photos"
 
-msgid "Slide Interval (seconds):"
-msgstr "Intervallo slide (secondi):"
+#: contents/ui/config.qml:67
+msgid "Path to the photo folder on Nextcloud (searches in subfolders too)"
+msgstr "Percorso alla cartella foto su Nextcloud (cerca anche nelle sottocartelle)"
 
+#: contents/ui/config.qml:72
+msgid "Slide Interval (seconds):"
+msgstr "Intervallo Slide (secondi):"
+
+#: contents/ui/config.qml:73
 msgid "10"
 msgstr "10"
 
-msgid "Transition Duration (ms):"
-msgstr "Durata transizione (ms):"
+#: contents/ui/config.qml:76
+msgid "Time each image is displayed before switching to the next"
+msgstr "Tempo in cui ogni immagine viene visualizzata prima di passare alla successiva"
 
+#: contents/ui/config.qml:81
+msgid "Transition Duration (ms):"
+msgstr "Durata Transizione (ms):"
+
+#: contents/ui/config.qml:82
 msgid "1000"
 msgstr "1000"
 
+#: contents/ui/config.qml:89
+msgid "Duration of the transition effect between images (in milliseconds)"
+msgstr "Durata dell'effetto di transizione tra le immagini (in millisecondi)"
+
+#: contents/ui/config.qml:94
 msgid "Transitions:"
 msgstr "Transizioni:"
 
+#: contents/ui/config.qml:95
 msgid "Enable transitions between images"
 msgstr "Abilita transizioni tra le immagini"
 
+#: contents/ui/config.qml:98
+msgid "Enable smooth transition effects (fade, slide, zoom) when switching between images"
+msgstr "Abilita effetti di transizione fluidi (dissolvenza, scorrimento, zoom) quando si passa tra le immagini"
+
+#: contents/ui/config.qml:104
 msgid "Randomize transition type"
-msgstr "Randomizza il tipo di transizione"
+msgstr "Randomizza tipo di transizione"
 
+#: contents/ui/config.qml:108
+msgid "Randomly select a different transition type for each image change"
+msgstr "Seleziona casualmente un diverso tipo di transizione per ogni cambio immagine"
+
+#: contents/ui/config.qml:113
 msgid "Transition Type:"
-msgstr "Tipo transizione:"
+msgstr "Tipo di Transizione:"
 
+#: contents/ui/config.qml:115
 msgid "Fade"
 msgstr "Dissolvenza"
 
+#: contents/ui/config.qml:116
 msgid "Slide"
 msgstr "Scorrimento"
 
+#: contents/ui/config.qml:117
 msgid "Zoom"
 msgstr "Zoom"
 
-msgid "Order Mode:"
-msgstr "Modalità ordine:"
+#: contents/ui/config.qml:123
+msgid "Type of transition: Fade (crossfade), Slide (horizontal movement), Zoom (scale effect)"
+msgstr "Tipo di transizione: Dissolvenza (crossfade), Scorrimento (movimento orizzontale), Zoom (effetto scala)"
 
+#: contents/ui/config.qml:128
+msgid "Order Mode:"
+msgstr "Modalità Ordine:"
+
+#: contents/ui/config.qml:130
 msgid "Sequential"
 msgstr "Sequenziale"
 
+#: contents/ui/config.qml:131
 msgid "Random (each time)"
 msgstr "Casuale (ogni volta)"
 
+#: contents/ui/config.qml:132
 msgid "Shuffle Once"
-msgstr "Mescola una volta"
+msgstr "Mescola Una Volta"
 
+#: contents/ui/config.qml:133
 msgid "Smart Random (avoid repeats)"
-msgstr "Casuale intelligente (evita ripetizioni)"
+msgstr "Casuale Intelligente (evita ripetizioni)"
 
-msgid "Background Color:"
-msgstr "Colore sfondo:"
+#: contents/ui/config.qml:138
+msgid "Sequential: in order | Random: random each time | Shuffle: shuffle once | Smart: avoids recent repeats"
+msgstr "Sequenziale: in ordine | Casuale: casuale ogni volta | Mescola: mescola una volta | Intelligente: evita ripetizioni recenti"
 
-msgid "Select Background Color"
-msgstr "Seleziona colore sfondo"
-
+#: contents/ui/config.qml:143
 msgid "Blur background:"
-msgstr "Sfocatura sfondo:"
+msgstr "Sfondo sfocato:"
 
+#: contents/ui/config.qml:144
 msgid "Apply blur effect to images"
 msgstr "Applica effetto sfocatura alle immagini"
 
+#: contents/ui/config.qml:147
+msgid "Apply a blur effect to the images for a softer, artistic appearance"
+msgstr "Applica un effetto sfocatura alle immagini per un aspetto più morbido e artistico"
+
+#: contents/ui/config.qml:151
 msgid "Blur opacity (%):"
-msgstr "Opacità sfocatura (%):"
+msgstr "Opacità Sfocatura (%):"
 
-msgid "Lower values make images more transparent (0 = fully transparent, 100 = fully opaque)"
-msgstr "Valori più bassi rendono le immagini più trasparenti (0 = completamente trasparente, 100 = completamente opaco)"
+#: contents/ui/config.qml:169
+msgid "Opacity of the blur effect (0% = no blur, 100% = maximum blur)"
+msgstr "Opacità dell'effetto sfocatura (0% = nessuna sfocatura, 100% = sfocatura massima)"
 
+#: contents/ui/config.qml:182
 msgid "Fill Mode:"
-msgstr "Modalità riempimento:"
+msgstr "Modalità Riempimento:"
 
+#: contents/ui/config.qml:184
 msgid "Stretch"
 msgstr "Allunga"
 
+#: contents/ui/config.qml:185
 msgid "Fit (Preserve Aspect)"
-msgstr "Adatta (Mantieni proporzioni)"
+msgstr "Adatta (Mantieni Proporzioni)"
 
+#: contents/ui/config.qml:186
 msgid "Crop (Preserve Aspect)"
-msgstr "Ritaglia (Mantieni proporzioni)"
+msgstr "Ritaglia (Mantieni Proporzioni)"
 
+#: contents/ui/config.qml:187
 msgid "Tile"
-msgstr "Piastrelle"
+msgstr "Piastrella"
 
+#: contents/ui/config.qml:188
 msgid "Tile Vertically"
-msgstr "Piastrelle verticali"
+msgstr "Piastrella Verticalmente"
 
+#: contents/ui/config.qml:189
 msgid "Tile Horizontally"
-msgstr "Piastrelle orizzontali"
+msgstr "Piastrella Orizzontalmente"
 
+#: contents/ui/config.qml:194
+msgid "How the image is displayed: Stretch fills screen, Fit preserves aspect, Crop fills without distortion, Tile repeats"
+msgstr "Come viene visualizzata l'immagine: Allunga riempie lo schermo, Adatta mantiene le proporzioni, Ritaglia riempie senza distorsione, Piastrella ripete"
+
+#: contents/ui/config.qml:198
 msgid "Image Scale (%):"
-msgstr "Scala immagine (%):"
+msgstr "Scala Immagine (%):"
 
+#: contents/ui/config.qml:215
+msgid "Scale image size (50% = half size, 100% = normal, 200% = double)"
+msgstr "Scala la dimensione dell'immagine (50% = metà dimensione, 100% = normale, 200% = doppio)"
+
+#: contents/ui/config.qml:228
+msgid "Background Color:"
+msgstr "Colore di Sfondo:"
+
+#: contents/ui/config.qml:229
+msgid "Select Background Color"
+msgstr "Seleziona Colore di Sfondo"
+
+#: contents/ui/config.qml:232
+msgid "Background color shown while loading or if image doesn't fill screen"
+msgstr "Colore di sfondo mostrato durante il caricamento o se l'immagine non riempie lo schermo"
+
+#: contents/ui/config.qml:237
 msgid "Loading Indicator:"
-msgstr "Indicatore di caricamento:"
+msgstr "Indicatore di Caricamento:"
 
+#: contents/ui/config.qml:238
 msgid "Show loading indicator when loading images"
 msgstr "Mostra indicatore di caricamento durante il caricamento delle immagini"
 
+#: contents/ui/config.qml:241
+msgid "Display a visual indicator while images are being loaded from Nextcloud"
+msgstr "Mostra un indicatore visivo mentre le immagini vengono caricate da Nextcloud"
 
-msgid "About:"
-msgstr "Informazioni:"
-
-msgid "Version: 1.0"
-msgstr "Versione: 1.0"
-
-msgid "License: GPL-2.0-or-later"
-msgstr "Licenza: GPL-2.0-or-later"
-
-msgid "Author: Nextcloud Carousel Developer"
-msgstr "Autore: Nextcloud Carousel Developer"

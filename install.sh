@@ -23,6 +23,21 @@ if [ -d "$SOURCE_IMAGE_DIR" ]; then
     mkdir -p "$PLUGIN_IMAGE_DIR"
     cp -r "$SOURCE_IMAGE_DIR"/* "$PLUGIN_IMAGE_DIR/"
     echo "✅ Image plugin installed successfully!"
+    
+    # Compile translations for image plugin
+    if command -v msgfmt >/dev/null 2>&1; then
+        echo "Compiling translations for carousel plugin..."
+        for po_file in "$SOURCE_IMAGE_DIR"/contents/locale/*/LC_MESSAGES/*.po; do
+            if [ -f "$po_file" ]; then
+                lang_dir=$(dirname "$po_file")
+                lang=$(basename "$(dirname "$lang_dir")")
+                po_name=$(basename "$po_file" .po)
+                mo_file="$PLUGIN_IMAGE_DIR/contents/locale/$lang/LC_MESSAGES/${po_name}.mo"
+                mkdir -p "$(dirname "$mo_file")"
+                msgfmt -o "$mo_file" "$po_file" 2>/dev/null && echo "  ✅ Compiled $lang translation" || echo "  ⚠️  Failed to compile $lang translation"
+            fi
+        done
+    fi
 else
     echo "⚠️  Image plugin source not found: $SOURCE_IMAGE_DIR"
 fi
@@ -38,6 +53,21 @@ if [ -d "$SOURCE_VIDEO_DIR" ]; then
     mkdir -p "$PLUGIN_VIDEO_DIR"
     cp -r "$SOURCE_VIDEO_DIR"/* "$PLUGIN_VIDEO_DIR/"
     echo "✅ Video plugin installed successfully!"
+    
+    # Compile translations for video plugin
+    if command -v msgfmt >/dev/null 2>&1; then
+        echo "Compiling translations for video plugin..."
+        for po_file in "$SOURCE_VIDEO_DIR"/contents/locale/*/LC_MESSAGES/*.po; do
+            if [ -f "$po_file" ]; then
+                lang_dir=$(dirname "$po_file")
+                lang=$(basename "$(dirname "$lang_dir")")
+                po_name=$(basename "$po_file" .po)
+                mo_file="$PLUGIN_VIDEO_DIR/contents/locale/$lang/LC_MESSAGES/${po_name}.mo"
+                mkdir -p "$(dirname "$mo_file")"
+                msgfmt -o "$mo_file" "$po_file" 2>/dev/null && echo "  ✅ Compiled $lang translation" || echo "  ⚠️  Failed to compile $lang translation"
+            fi
+        done
+    fi
 else
     echo "⚠️  Video plugin source not found: $SOURCE_VIDEO_DIR"
 fi
