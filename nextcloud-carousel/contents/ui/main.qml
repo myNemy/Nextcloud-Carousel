@@ -31,6 +31,7 @@ WallpaperItem {
         property int maxCacheSize: 1  // Will be calculated based on photoList.length
         property var dataUrlCache: ({})  // LRU cache: { imageUrl: dataUrl }
         property var cacheOrder: []  // Track cache order for LRU eviction (first = least recently used)
+        property bool cacheLocked: false  // Prevent race conditions during cache operations
         
         // Calculate optimal cache size based on total number of photos in the list
         // Strategy: Keep only 1-2 data URLs in memory (current + maybe next for preload)
@@ -296,19 +297,36 @@ WallpaperItem {
         
         // Clear data URL cache to free memory
         function clearDataUrlCache() {
+            // Prevent concurrent access
+            if (cacheLocked) {
+                console.warn("⚠️  Cache is locked, skipping cleanup")
+                return
+            }
+            
             try {
-                var cacheSize = dataUrlCache ? Object.keys(dataUrlCache).length : 0
+                cacheLocked = true
+                // Use cacheOrder.length instead of Object.keys() for QML compatibility
+                var cacheSize = cacheOrder ? cacheOrder.length : 0
                 console.log("Clearing data URL cache, current size:", cacheSize, "entries")
+                
+                // Clear cache by creating new objects (safer than delete in QML)
                 dataUrlCache = {}
                 cacheOrder = []
+                
                 // Force garbage collection hint (QML will handle it)
                 console.log("✅ Data URL cache cleared")
             } catch (e) {
                 console.error("❌ Error clearing cache:", e)
                 // Reset to safe state
-                dataUrlCache = {}
-                cacheOrder = []
+                try {
+                    dataUrlCache = {}
+                    cacheOrder = []
+                } catch (e2) {
+                    console.error("❌ Critical error resetting cache:", e2)
+                }
             }
+            // Always unlock (QML doesn't support finally, so we do it here)
+            cacheLocked = false
         }
         
         // Get data URL from cache or return null if not cached
@@ -322,16 +340,29 @@ WallpaperItem {
                 return null
             }
             
-            // Check if URL exists in cache using 'in' operator (QML-compatible)
-            if (imageUrl in dataUrlCache) {
-                // Move to end of cache order (most recently used)
-                var index = cacheOrder.indexOf(imageUrl)
-                if (index !== -1) {
-                    cacheOrder.splice(index, 1)
+            // Skip if cache is being cleared
+            if (cacheLocked) {
+                return null
+            }
+            
+            try {
+                // Check if URL exists in cache using 'in' operator (QML-compatible)
+                if (imageUrl in dataUrlCache) {
+                    // Move to end of cache order (most recently used)
+                    // Create a copy to avoid modifying while iterating
+                    var currentOrder = cacheOrder.slice()  // Copy array
+                    var index = currentOrder.indexOf(imageUrl)
+                    if (index !== -1) {
+                        currentOrder.splice(index, 1)
+                    }
+                    currentOrder.push(imageUrl)
+                    cacheOrder = currentOrder  // Replace entire array (atomic)
+                    console.log("✅ Data URL found in cache for:", imageUrl.replace(/https?:\/\/[^@]+@/, ""))
+                    return dataUrlCache[imageUrl]
                 }
-                cacheOrder.push(imageUrl)
-                console.log("✅ Data URL found in cache for:", imageUrl.replace(/https?:\/\/[^@]+@/, ""))
-                return dataUrlCache[imageUrl]
+            } catch (e) {
+                console.error("❌ Error in getCachedDataUrl:", e)
+                return null
             }
             return null
         }
@@ -349,34 +380,55 @@ WallpaperItem {
                 return
             }
             
-            // Always cache - no size limit (user wants to see all images)
-            // If cache is disabled (maxCacheSize = 0), don't cache
-            if (maxCacheSize <= 0) {
+            // Skip if cache is being cleared
+            if (cacheLocked) {
+                console.warn("⚠️  Cache is locked, skipping cache operation")
                 return
             }
             
-            // If already in cache, just update order (move to end)
-            if (imageUrl in dataUrlCache) {
-                var index = cacheOrder.indexOf(imageUrl)
-                if (index !== -1) {
-                    cacheOrder.splice(index, 1)
+            try {
+                // Always cache - no size limit (user wants to see all images)
+                // If cache is disabled (maxCacheSize = 0), don't cache
+                if (maxCacheSize <= 0) {
+                    return
                 }
-            } else {
-                // Remove oldest entry (first in cacheOrder) if cache is full
-                if (cacheOrder.length >= maxCacheSize) {
-                    var oldestUrl = cacheOrder.shift()
-                    if (oldestUrl && oldestUrl in dataUrlCache) {
-                        // Remove from cache object using delete operator (QML-compatible)
-                        delete dataUrlCache[oldestUrl]
-                        console.log("🗑️  Evicted oldest data URL from cache:", oldestUrl.replace(/https?:\/\/[^@]+@/, ""))
+                
+                // Create a copy to avoid modifying while iterating (atomic operations)
+                var currentOrder = cacheOrder.slice()  // Copy array
+                
+                // If already in cache, just update order (move to end)
+                if (imageUrl in dataUrlCache) {
+                    var index = currentOrder.indexOf(imageUrl)
+                    if (index !== -1) {
+                        currentOrder.splice(index, 1)
+                    }
+                } else {
+                    // Remove oldest entry (first in cacheOrder) if cache is full
+                    if (currentOrder.length >= maxCacheSize) {
+                        var oldestUrl = currentOrder.shift()
+                        if (oldestUrl) {
+                            // Create new cache object without the oldest entry (safer than delete in QML)
+                            var newCache = {}
+                            for (var key in dataUrlCache) {
+                                if (key !== oldestUrl) {
+                                    newCache[key] = dataUrlCache[key]
+                                }
+                            }
+                            dataUrlCache = newCache
+                            console.log("🗑️  Evicted oldest data URL from cache:", oldestUrl.replace(/https?:\/\/[^@]+@/, ""))
+                        }
                     }
                 }
+                
+                // Add/update in cache (always add to end)
+                dataUrlCache[imageUrl] = dataUrl
+                currentOrder.push(imageUrl)
+                cacheOrder = currentOrder  // Replace entire array (atomic)
+                console.log("💾 Cached data URL, cache size:", cacheOrder.length, "/", maxCacheSize)
+            } catch (e) {
+                console.error("❌ Error in cacheDataUrl:", e)
+                // Don't crash, just log the error
             }
-            
-            // Add/update in cache
-            dataUrlCache[imageUrl] = dataUrl
-            cacheOrder.push(imageUrl)
-            console.log("💾 Cached data URL, cache size:", cacheOrder.length, "/", maxCacheSize)
         }
         
         function updateCurrentImage() {
