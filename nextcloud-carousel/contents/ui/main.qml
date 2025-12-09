@@ -1088,17 +1088,26 @@ WallpaperItem {
                 
                 // Cleanup old image when removed (memory management)
                 // Store reference to avoid null errors
+                // Use flag to prevent double destruction (both onDeactivated and onRemoved may be called)
                 var imageToCleanup = pendingImage
+                var isDestroyed = false  // Flag to prevent double destruction
+                
                 imageToCleanup.QQC2.StackView.onDeactivated.connect(function() {
                     console.log("Image deactivated, destroying")
-                    if (imageToCleanup) {
+                    if (imageToCleanup && !isDestroyed) {
+                        isDestroyed = true
                         imageToCleanup.destroy()
+                    } else if (isDestroyed) {
+                        console.log("Image already destroyed, skipping onDeactivated")
                     }
                 })
                 imageToCleanup.QQC2.StackView.onRemoved.connect(function() {
                     console.log("Image removed, destroying")
-                    if (imageToCleanup) {
+                    if (imageToCleanup && !isDestroyed) {
+                        isDestroyed = true
                         imageToCleanup.destroy()
+                    } else if (isDestroyed) {
+                        console.log("Image already destroyed, skipping onRemoved")
                     }
                 })
                 
