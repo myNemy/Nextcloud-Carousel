@@ -24,6 +24,7 @@ WallpaperItem {
         
         property var photoList: []
         property var usedIndices: []  // Track recently used indices to avoid repeats
+        property var recentIndices: []  // Track recent indices for better randomization
         property int currentIndex: 0
         property bool initialized: false
         property int lastIndex: -1  // Track last shown index
@@ -97,11 +98,18 @@ WallpaperItem {
             xhr.open("PROPFIND", webdavUrl, true, username, password)
             xhr.setRequestHeader("Depth", "infinity")  // Read all subfolders recursively
             xhr.setRequestHeader("Content-Type", "application/xml")
+            xhr.timeout = 30000  // 30 seconds timeout for PROPFIND (can be slow with many folders)
             
             var propfindBody = '<?xml version="1.0"?>' +
                 '<d:propfind xmlns:d="DAV:">' +
                 '<d:prop><d:getcontenttype/></d:prop>' +
                 '</d:propfind>'
+            
+            xhr.ontimeout = function() {
+                console.error("⏱️  PROPFIND request timed out after 30 seconds")
+                console.error("This may indicate network issues or a very large folder structure")
+                root.loading = false
+            }
             
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === XMLHttpRequest.DONE) {
@@ -196,12 +204,15 @@ WallpaperItem {
                                 // Smart random: start with random index
                                 currentIndex = Math.floor(Math.random() * photoList.length)
                                 usedIndices = [currentIndex]
+                                recentIndices = [currentIndex]
                             } else {
                                 // Sequential: start from beginning
                                 currentIndex = 0
                             }
                             
                             lastIndex = -1
+                            usedIndices = []
+                            recentIndices = []
                             startCarousel()
                             updateCurrentImage()
                         } else {
@@ -245,29 +256,80 @@ WallpaperItem {
                 // Sequential: next in order
                 currentIndex = (currentIndex + 1) % photoList.length
             } else if (orderMode === 1) {
-                // Random: completely random each time
-                var newIndex
-                do {
-                    newIndex = Math.floor(Math.random() * photoList.length)
-                } while (newIndex === lastIndex && photoList.length > 1)
-                currentIndex = newIndex
-                lastIndex = newIndex
-            } else if (orderMode === 2) {
-                // Shuffle once: sequential through shuffled list
-                currentIndex = (currentIndex + 1) % photoList.length
-            } else if (orderMode === 3) {
-                // Smart random: avoid showing same image consecutively
-                // Keep track of recently used indices
+                // Random: avoid recent photos (last 3-5 depending on list size)
+                var avoidCount = Math.min(Math.max(3, Math.floor(photoList.length * 0.3)), 5)
                 var availableIndices = []
+                
+                // Build list of available indices excluding recent ones
                 for (var i = 0; i < photoList.length; i++) {
-                    if (i !== lastIndex) {
+                    var isRecent = false
+                    // Check if index is in recent list
+                    for (var j = 0; j < recentIndices.length && j < avoidCount; j++) {
+                        if (recentIndices[recentIndices.length - 1 - j] === i) {
+                            isRecent = true
+                            break
+                        }
+                    }
+                    if (!isRecent) {
                         availableIndices.push(i)
                     }
                 }
                 
+                // If all indices are recent, use all except last one
                 if (availableIndices.length === 0) {
-                    // Fallback if only one image
-                    availableIndices = [0]
+                    for (var k = 0; k < photoList.length; k++) {
+                        if (k !== lastIndex) {
+                            availableIndices.push(k)
+                        }
+                    }
+                    if (availableIndices.length === 0) {
+                        availableIndices = [0]
+                    }
+                }
+                
+                var randomPos = Math.floor(Math.random() * availableIndices.length)
+                currentIndex = availableIndices[randomPos]
+                lastIndex = currentIndex
+                
+                // Track recent indices
+                recentIndices.push(currentIndex)
+                if (recentIndices.length > 10) {
+                    recentIndices.shift()
+                }
+            } else if (orderMode === 2) {
+                // Shuffle once: sequential through shuffled list
+                currentIndex = (currentIndex + 1) % photoList.length
+            } else if (orderMode === 3) {
+                // Smart random: avoid showing same image consecutively and prefer unused images
+                var availableIndices = []
+                
+                // First, try to find images not in recent list
+                for (var i = 0; i < photoList.length; i++) {
+                    if (i !== lastIndex) {
+                        var isRecent = false
+                        // Check if index is in recent list (last 5)
+                        for (var j = 0; j < recentIndices.length && j < 5; j++) {
+                            if (recentIndices[recentIndices.length - 1 - j] === i) {
+                                isRecent = true
+                                break
+                            }
+                        }
+                        if (!isRecent) {
+                            availableIndices.push(i)
+                        }
+                    }
+                }
+                
+                // If all images are recent, use all except last one
+                if (availableIndices.length === 0) {
+                    for (var k = 0; k < photoList.length; k++) {
+                        if (k !== lastIndex) {
+                            availableIndices.push(k)
+                        }
+                    }
+                    if (availableIndices.length === 0) {
+                        availableIndices = [0]
+                    }
                 }
                 
                 // Pick random from available
@@ -279,6 +341,12 @@ WallpaperItem {
                 usedIndices.push(currentIndex)
                 if (usedIndices.length > 5) {
                     usedIndices.shift()
+                }
+                
+                // Track recent indices (keep last 10)
+                recentIndices.push(currentIndex)
+                if (recentIndices.length > 10) {
+                    recentIndices.shift()
                 }
             }
             
@@ -443,30 +511,37 @@ WallpaperItem {
         }
         
         function arrayBufferToBase64(buffer) {
-            // Manual base64 encoding (btoa might not be available in QML)
+            // Optimized manual base64 encoding (btoa might not be available in QML)
+            // Uses array instead of string concatenation for better performance with large images
+            // This follows QML best practices for heavy string operations
             var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
             var bytes = new Uint8Array(buffer)
             var len = bytes.length
-            var base64 = ''
+            var base64Array = []  // Use array instead of string concatenation (much faster)
             
+            // Process in chunks of 3 bytes
             for (var i = 0; i < len; i += 3) {
-                base64 += chars[bytes[i] >> 2]
-                base64 += chars[((bytes[i] & 3) << 4) | (bytes[i + 1] >> 4)]
-                base64 += chars[((bytes[i + 1] & 15) << 2) | (bytes[i + 2] >> 6)]
-                base64 += chars[bytes[i + 2] & 63]
+                base64Array.push(chars[bytes[i] >> 2])
+                base64Array.push(chars[((bytes[i] & 3) << 4) | ((i + 1 < len ? bytes[i + 1] : 0) >> 4)])
+                base64Array.push(chars[((i + 1 < len ? bytes[i + 1] : 0) & 15) << 2 | ((i + 2 < len ? bytes[i + 2] : 0) >> 6)])
+                base64Array.push(chars[(i + 2 < len ? bytes[i + 2] : 0) & 63])
             }
             
+            // Handle padding
             if ((len % 3) === 2) {
-                base64 = base64.substring(0, base64.length - 1) + '='
+                base64Array[base64Array.length - 1] = '='
             } else if (len % 3 === 1) {
-                base64 = base64.substring(0, base64.length - 2) + '=='
+                base64Array[base64Array.length - 1] = '='
+                base64Array[base64Array.length - 2] = '='
             }
             
-            return base64
+            // Join array to string (much faster than incremental concatenation)
+            return base64Array.join('')
         }
         
         // Read EXIF orientation from JPEG ArrayBuffer
         // Returns rotation angle in degrees (0, 90, -90, 180) or 0 if not found/error
+        // Optimized: Only searches first 64KB where EXIF data is always located (prevents UI blocking on large images)
         function readExifOrientation(arrayBuffer) {
             try {
                 var bytes = new Uint8Array(arrayBuffer)
@@ -479,10 +554,18 @@ WallpaperItem {
                 }
                 console.log("✅ JPEG header found (0xFFD8)")
                 
+                // Optimize: EXIF data is always in the first segments (typically < 64KB)
+                // Limit search to first 64KB to prevent UI blocking on very large images
+                // This follows QML best practices for heavy operations
+                var maxSearchBytes = Math.min(bytes.length, 65536)  // 64KB limit
+                if (bytes.length > 65536) {
+                    console.log("ℹ️  Large image detected, limiting EXIF search to first 64KB (optimization)")
+                }
+                
                 // Search for APP1 marker (0xFFE1) which contains EXIF data
                 var i = 2  // Start after SOI marker
                 var app1Found = false
-                while (i < bytes.length - 1) {
+                while (i < maxSearchBytes - 1) {
                     // Check for APP1 marker
                     if (bytes[i] === 0xFF && bytes[i + 1] === 0xE1) {
                         app1Found = true
@@ -668,6 +751,18 @@ WallpaperItem {
             var xhr = new XMLHttpRequest()
             xhr.open("GET", cleanUrl, true, username, password)
             xhr.responseType = "arraybuffer"
+            xhr.timeout = 60000  // 60 seconds timeout for image download (images can be large)
+            
+            xhr.ontimeout = function() {
+                console.error("⏱️  Image download timed out after 60 seconds:", cleanUrl.replace(/https?:\/\/[^@]+@/, ""))
+                console.error("This may indicate network issues or a very large image file")
+                root.loading = false
+                // Try next image if available
+                if (photoList.length > 1) {
+                    console.log("Skipping timed out image, trying next...")
+                    carouselTimer.restart()
+                }
+            }
             
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === XMLHttpRequest.DONE) {
@@ -850,9 +945,20 @@ WallpaperItem {
         }
         
         // Image stack for smooth transitions (following KDE official pattern)
+        // Note: StackView depth property is read-only and indicates current stack depth
+        // With replace(), depth should be 1-2 (current + new during transition)
+        // onDeactivated destroys items immediately when deactivated (memory management)
         QQC2.StackView {
             id: imageStack
             anchors.fill: parent
+            
+            // Monitor depth for safety (following Qt/KDE best practices)
+            // With replace(), depth should never exceed 2-3 even during transitions
+            onDepthChanged: {
+                if (depth > 3) {
+                    console.warn("⚠️  StackView depth exceeded expected limit:", depth, "- monitoring for memory issues")
+                }
+            }
             
             // Properties for transition configuration
             property int transitionDuration: root.configuration.TransitionDuration || 1000
@@ -997,11 +1103,21 @@ WallpaperItem {
                 })
                 
                 // Replace with transition
+                // Following KDE official pattern: replace() maintains only 1-2 items during transitions
+                // onDeactivated destroys immediately when item is deactivated (memory management)
                 console.log("Calling imageStack.replace() with pendingImage")
+                console.log("StackView depth before replace:", imageStack.depth)
+                
+                // Safety check: if depth is unexpectedly high, log warning
+                // With replace(), depth should be 1-2 (current + new during transition)
+                if (imageStack.depth > 3) {
+                    console.warn("⚠️  StackView depth is unexpectedly high:", imageStack.depth, "- this may indicate a memory issue")
+                }
+                
                 var result = imageStack.replace(pendingImage, {}, QQC2.StackView.Transition)
                 console.log("replace() result:", result)
                 console.log("StackView currentItem:", imageStack.currentItem)
-                console.log("StackView depth:", imageStack.depth)
+                console.log("StackView depth after replace:", imageStack.depth)
                 
                 root.loading = false
                 

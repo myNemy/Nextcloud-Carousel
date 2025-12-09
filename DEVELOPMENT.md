@@ -539,6 +539,34 @@ The transition system has been successfully implemented. When an image changes:
 
 **📚 Official Documentation Analysis:**
 
+### Randomization Pattern Conformity (2024-12-28)
+
+After consulting the official KDE Plasma slideshow plugin (`org.kde.slideshow`) and Qt/QML documentation, we verified:
+
+1. **Official KDE Plugin Pattern:**
+   - Uses `PlasmaWallpaper.SortingMode.Random` enum from `org.kde.plasma.wallpapers.image` module
+   - Location: `/usr/share/plasma/wallpapers/org.kde.slideshow/contents/ui/SlideshowComponent.qml`
+   - The official plugin uses an enum-based approach for sorting modes
+
+2. **Our Implementation:**
+   - Uses standard JavaScript (`Math.random()`, `Math.floor()`, array operations)
+   - All operations are standard ECMAScript supported in QML
+   - Pattern is consistent with our video plugin
+   - No non-standard or deprecated APIs used
+
+3. **Conformity Status:**
+   - ✅ **Conforms to Qt/QML official documentation**
+   - ✅ **Uses only standard JavaScript supported in QML**
+   - ✅ **No external dependencies or non-standard APIs**
+   - ✅ **Follows QML best practices** (try-catch, atomic operations with `slice()`)
+
+4. **Note:**
+   - While the official plugin uses `PlasmaWallpaper.SortingMode.Random`, our manual implementation provides more control (avoids recent repeats, multiple modes)
+   - Our implementation is fully compliant with Qt/QML standards
+   - Already tested and working
+
+### Transitions Pattern (Previous Analysis)
+
 After consulting the official KDE Plasma slideshow plugin (`org.kde.slideshow`) and Qt/QML documentation, we found:
 
 1. **KDE Official Plugin Uses StackView:**

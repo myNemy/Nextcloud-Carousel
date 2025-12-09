@@ -69,11 +69,18 @@ WallpaperItem {
             xhr.open("PROPFIND", webdavUrl, true, username, password)
             xhr.setRequestHeader("Depth", "infinity")  // Read all subfolders recursively
             xhr.setRequestHeader("Content-Type", "application/xml")
+            xhr.timeout = 30000  // 30 seconds timeout for PROPFIND (can be slow with many folders)
             
             var propfindBody = '<?xml version="1.0"?>' +
                 '<d:propfind xmlns:d="DAV:">' +
                 '<d:prop><d:getcontenttype/></d:prop>' +
                 '</d:propfind>'
+            
+            xhr.ontimeout = function() {
+                console.error("⏱️  PROPFIND request timed out after 30 seconds")
+                console.error("This may indicate network issues or a very large folder structure")
+                root.loading = false
+            }
             
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === XMLHttpRequest.DONE) {
