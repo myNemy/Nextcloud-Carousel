@@ -27,6 +27,38 @@ WallpaperItem {
         property int currentIndex: 0
         property bool initialized: false
         property int lastIndex: -1  // Track last shown index
+        property int imageSwitchCount: 0  // Track number of image switches for periodic cleanup
+        property int maxCacheSize: 1  // Will be calculated based on photoList.length
+        property var dataUrlCache: ({})  // LRU cache: { imageUrl: dataUrl }
+        property var cacheOrder: []  // Track cache order for LRU eviction (first = least recently used)
+        
+        // Calculate optimal cache size based on total number of photos in the list
+        // Strategy: Keep only 1-2 data URLs in memory (current + maybe next for preload)
+        // This minimizes memory usage while still allowing smooth transitions
+        // StackView already destroys Image components when removed, so we don't need to cache many
+        function updateCacheSize() {
+            // Safety check
+            if (!photoList) {
+                console.warn("⚠️  updateCacheSize: photoList is not valid")
+                maxCacheSize = 1
+                return
+            }
+            
+            var totalPhotos = photoList.length
+            
+            if (totalPhotos === 0) {
+                maxCacheSize = 1
+            } else if (totalPhotos === 1) {
+                // Only 1 photo: cache just that one (avoids re-downloading when it loops)
+                maxCacheSize = 1
+            } else {
+                // 2+ photos: cache only 2 (current + next for smooth transition)
+                // This keeps memory usage minimal even with hundreds of photos
+                // StackView handles destruction of old images automatically
+                maxCacheSize = 2
+            }
+            console.log("📊 Cache configuration: will cache", maxCacheSize, "data URLs out of", totalPhotos, "total photos (lazy loading strategy)")
+        }
         
         function initialize() {
             if (root.configuration.NextcloudUrl === "" || 
@@ -140,6 +172,13 @@ WallpaperItem {
                         photoList = images
                         
                         if (photoList.length > 0) {
+                            // Reset switch counter and clear cache when reloading photo list
+                            imageSwitchCount = 0
+                            clearDataUrlCache()
+                            
+                            // Update cache size based on number of photos
+                            updateCacheSize()
+                            
                             // Handle different order modes
                             var orderMode = root.configuration.RandomOrder || 0
                             
@@ -242,7 +281,102 @@ WallpaperItem {
                 }
             }
             
+            // Increment switch counter for periodic cleanup
+            imageSwitchCount++
+            
+            // Periodic cleanup every 10 images to prevent memory accumulation
+            if (imageSwitchCount >= 10) {
+                console.log("🧹 Periodic cleanup: clearing data URL cache (image", imageSwitchCount, ")")
+                imageSwitchCount = 0
+                clearDataUrlCache()
+            }
+            
             updateCurrentImage()
+        }
+        
+        // Clear data URL cache to free memory
+        function clearDataUrlCache() {
+            try {
+                var cacheSize = dataUrlCache ? Object.keys(dataUrlCache).length : 0
+                console.log("Clearing data URL cache, current size:", cacheSize, "entries")
+                dataUrlCache = {}
+                cacheOrder = []
+                // Force garbage collection hint (QML will handle it)
+                console.log("✅ Data URL cache cleared")
+            } catch (e) {
+                console.error("❌ Error clearing cache:", e)
+                // Reset to safe state
+                dataUrlCache = {}
+                cacheOrder = []
+            }
+        }
+        
+        // Get data URL from cache or return null if not cached
+        // Uses LRU: moves accessed item to end of cacheOrder (most recently used)
+        function getCachedDataUrl(imageUrl) {
+            // Safety checks
+            if (!imageUrl) {
+                return null
+            }
+            if (!dataUrlCache || !cacheOrder) {
+                return null
+            }
+            
+            // Check if URL exists in cache using 'in' operator (QML-compatible)
+            if (imageUrl in dataUrlCache) {
+                // Move to end of cache order (most recently used)
+                var index = cacheOrder.indexOf(imageUrl)
+                if (index !== -1) {
+                    cacheOrder.splice(index, 1)
+                }
+                cacheOrder.push(imageUrl)
+                console.log("✅ Data URL found in cache for:", imageUrl.replace(/https?:\/\/[^@]+@/, ""))
+                return dataUrlCache[imageUrl]
+            }
+            return null
+        }
+        
+        // Store data URL in cache (LRU eviction if needed)
+        // Uses LRU: removes first item in cacheOrder (least recently used) if cache is full
+        function cacheDataUrl(imageUrl, dataUrl) {
+            // Safety checks
+            if (!imageUrl || !dataUrl) {
+                console.warn("⚠️  cacheDataUrl: Invalid parameters")
+                return
+            }
+            if (!dataUrlCache || !cacheOrder) {
+                console.warn("⚠️  cacheDataUrl: Cache not initialized")
+                return
+            }
+            
+            // Always cache - no size limit (user wants to see all images)
+            // If cache is disabled (maxCacheSize = 0), don't cache
+            if (maxCacheSize <= 0) {
+                return
+            }
+            
+            // If already in cache, just update order (move to end)
+            if (imageUrl in dataUrlCache) {
+                var index = cacheOrder.indexOf(imageUrl)
+                if (index !== -1) {
+                    cacheOrder.splice(index, 1)
+                }
+            } else {
+                // Remove oldest entry (first in cacheOrder) if cache is full
+                if (cacheOrder.length >= maxCacheSize) {
+                    var oldestUrl = cacheOrder.shift()
+                    if (oldestUrl && oldestUrl in dataUrlCache) {
+                        // Remove from cache object using delete operator (QML-compatible)
+                        delete dataUrlCache[oldestUrl]
+                        console.log("🗑️  Evicted oldest data URL from cache:", oldestUrl.replace(/https?:\/\/[^@]+@/, ""))
+                    }
+                }
+            }
+            
+            // Add/update in cache
+            dataUrlCache[imageUrl] = dataUrl
+            cacheOrder.push(imageUrl)
+            console.log("💾 Cached data URL, cache size:", cacheOrder.length, "/", maxCacheSize)
         }
         
         function updateCurrentImage() {
@@ -444,7 +578,23 @@ WallpaperItem {
         }
         
         function loadImageWithAuth(imageUrl, skipAnimation) {
+            // Safety check
+            if (!imageUrl) {
+                console.error("❌ loadImageWithAuth: Invalid imageUrl")
+                root.loading = false
+                return
+            }
+            
             root.loading = true
+            
+            // Check cache first
+            var cachedDataUrl = getCachedDataUrl(imageUrl)
+            if (cachedDataUrl) {
+                console.log("Using cached data URL, skipping download")
+                // Use cached data URL directly
+                createImageComponent(cachedDataUrl, imageUrl, skipAnimation)
+                return
+            }
             
             // Extract URL without auth for the request
             var cleanUrl = imageUrl
@@ -507,90 +657,17 @@ WallpaperItem {
                         
                         var dataUrl = "data:" + mimeType + ";base64," + base64
                         console.log("Image converted to data URL, MIME type:", mimeType)
-                        console.log("Creating image component for StackView (data URL length:", dataUrl.length, ")")
+                        console.log("Data URL size:", Math.round(dataUrl.length / 1024), "KB")
                         
-                        // Use StackView pattern (following KDE official implementation)
-                        // Clean up any existing pending image
-                        if (imageStack.pendingImage) {
-                            imageStack.pendingImage.statusChanged.disconnect(imageStack.replaceWhenLoaded)
-                            imageStack.pendingImage.destroy()
-                            imageStack.pendingImage = null
-                        }
-                        
-                        // Determine if we should skip animation (first image, explicit skip, or transitions disabled)
-                        imageStack.doesSkipAnimation = (imageStack.currentItem === undefined) || !!skipAnimation || !root.configuration.TransitionEnabled
-                        
-                        // Determine transition type (random or fixed)
-                        if (root.configuration.TransitionEnabled && root.configuration.TransitionRandom) {
-                            // Randomize transition type (0=Fade, 1=Slide, 2=Zoom)
-                            imageStack.transitionType = Math.floor(Math.random() * 3)
-                            console.log("Random transition type selected:", imageStack.transitionType, "(0=Fade, 1=Slide, 2=Zoom)")
+                        // Cache data URL for future use (if not too large)
+                        if (dataUrl && dataUrl.length > 0) {
+                            cacheDataUrl(imageUrl, dataUrl)
                         } else {
-                            // Use fixed transition type from configuration
-                            imageStack.transitionType = root.configuration.TransitionType || 0
+                            console.warn("⚠️  Invalid data URL, skipping cache")
                         }
                         
-                        // Create image component in background (following KDE pattern)
-                        var component = imageStack.imageComponent
-                        console.log("Component status:", component ? component.status : "null")
-                        if (component && component.status === Component.Ready) {
-                            console.log("Creating image component with data URL")
-                            console.log("StackView dimensions:", imageStack.width, "x", imageStack.height)
-                            console.log("Transition enabled:", root.configuration.TransitionEnabled)
-                            console.log("Transition random:", root.configuration.TransitionRandom)
-                            console.log("Transition type:", imageStack.transitionType, "(0=Fade, 1=Slide, 2=Zoom)")
-                            // Create with explicit dimensions to avoid size issues
-                            // Set initial position/scale based on transition type
-                            var initialX = (imageStack.transitionType === 1) ? imageStack.width : 0
-                            var initialScale = (imageStack.transitionType === 2) ? 0.8 : 1.0
-                            console.log("Creating ImageComponent with orientation:", orientation, "degrees")
-                            imageStack.pendingImage = component.createObject(imageStack, {
-                                "source": dataUrl,
-                                "fillMode": root.configuration.FillMode,
-                                "color": root.configuration.Color,
-                                "blur": root.configuration.Blur,
-                                "blurOpacity": root.configuration.BlurOpacity,
-                                "imageScale": root.configuration.ImageScale,
-                                "orientation": orientation,
-                                "width": imageStack.width,
-                                "height": imageStack.height,
-                                "x": initialX,
-                                "scale": initialScale
-                            })
-                            
-                            if (imageStack.pendingImage) {
-                                console.log("ImageComponent created with orientation property:", imageStack.pendingImage.orientation, "degrees")
-                            }
-                            
-                            if (imageStack.pendingImage) {
-                                console.log("Image component created:")
-                                console.log("  - status:", imageStack.pendingImage.status, "Image.Ready =", Image.Ready)
-                                console.log("  - dimensions:", imageStack.pendingImage.width, "x", imageStack.pendingImage.height)
-                                console.log("  - visible:", imageStack.pendingImage.visible)
-                                console.log("  - opacity:", imageStack.pendingImage.opacity)
-                                // Connect to statusChanged to replace when loaded
-                                // Note: statusChanged signal is automatically available via property alias
-                                if (imageStack.pendingImage.statusChanged) {
-                                    imageStack.pendingImage.statusChanged.connect(imageStack.replaceWhenLoaded)
-                                    console.log("Connected to statusChanged signal")
-                                } else {
-                                    console.warn("statusChanged signal not available!")
-                                }
-                                // Try to replace immediately (will wait if still loading)
-                                imageStack.replaceWhenLoaded()
-                            } else {
-                                console.error("Failed to create image component:", component ? component.errorString() : "component is null")
-                                root.loading = false
-                            }
-                        } else {
-                            console.error("Image component not ready. Status:", component ? component.status : "null", "Error:", component ? component.errorString() : "component is null")
-                            // Fallback: try to create component on the fly
-                            if (!component || component.status === Component.Error) {
-                                console.log("Attempting to reload ImageComponent")
-                                imageStack.imageComponent = Qt.createComponent("ImageComponent.qml", imageStack)
-                            }
-                            root.loading = false
-                        }
+                        // Create image component with data URL
+                        createImageComponent(dataUrl, imageUrl, skipAnimation, orientation)
                     } else {
                         console.error("Failed to load image. Status:", xhr.status, xhr.statusText)
                         if (xhr.status === 401) {
@@ -609,6 +686,95 @@ WallpaperItem {
             }
             
             xhr.send()
+        }
+        
+        // Create image component with data URL (extracted for reuse)
+        function createImageComponent(dataUrl, imageUrl, skipAnimation, orientation) {
+            console.log("Creating image component for StackView (data URL length:", dataUrl.length, ")")
+            
+            // Use StackView pattern (following KDE official implementation)
+            // Clean up any existing pending image
+            if (imageStack.pendingImage) {
+                imageStack.pendingImage.statusChanged.disconnect(imageStack.replaceWhenLoaded)
+                imageStack.pendingImage.destroy()
+                imageStack.pendingImage = null
+            }
+            
+            // Determine if we should skip animation (first image, explicit skip, or transitions disabled)
+            imageStack.doesSkipAnimation = (imageStack.currentItem === undefined) || !!skipAnimation || !root.configuration.TransitionEnabled
+            
+            // Determine transition type (random or fixed)
+            if (root.configuration.TransitionEnabled && root.configuration.TransitionRandom) {
+                // Randomize transition type (0=Fade, 1=Slide, 2=Zoom)
+                imageStack.transitionType = Math.floor(Math.random() * 3)
+                console.log("Random transition type selected:", imageStack.transitionType, "(0=Fade, 1=Slide, 2=Zoom)")
+            } else {
+                // Use fixed transition type from configuration
+                imageStack.transitionType = root.configuration.TransitionType || 0
+            }
+            
+            // Create image component in background (following KDE pattern)
+            var component = imageStack.imageComponent
+            console.log("Component status:", component ? component.status : "null")
+            if (component && component.status === Component.Ready) {
+                console.log("Creating image component with data URL")
+                console.log("StackView dimensions:", imageStack.width, "x", imageStack.height)
+                console.log("Transition enabled:", root.configuration.TransitionEnabled)
+                console.log("Transition random:", root.configuration.TransitionRandom)
+                console.log("Transition type:", imageStack.transitionType, "(0=Fade, 1=Slide, 2=Zoom)")
+                // Create with explicit dimensions to avoid size issues
+                // Set initial position/scale based on transition type
+                var initialX = (imageStack.transitionType === 1) ? imageStack.width : 0
+                var initialScale = (imageStack.transitionType === 2) ? 0.8 : 1.0
+                var imageOrientation = orientation !== undefined ? orientation : 0
+                console.log("Creating ImageComponent with orientation:", imageOrientation, "degrees")
+                imageStack.pendingImage = component.createObject(imageStack, {
+                    "source": dataUrl,
+                    "fillMode": root.configuration.FillMode,
+                    "color": root.configuration.Color,
+                    "blur": root.configuration.Blur,
+                    "blurOpacity": root.configuration.BlurOpacity,
+                    "imageScale": root.configuration.ImageScale,
+                    "orientation": imageOrientation,
+                    "width": imageStack.width,
+                    "height": imageStack.height,
+                    "x": initialX,
+                    "scale": initialScale
+                })
+                
+                if (imageStack.pendingImage) {
+                    console.log("ImageComponent created with orientation property:", imageStack.pendingImage.orientation, "degrees")
+                }
+                
+                if (imageStack.pendingImage) {
+                    console.log("Image component created:")
+                    console.log("  - status:", imageStack.pendingImage.status, "Image.Ready =", Image.Ready)
+                    console.log("  - dimensions:", imageStack.pendingImage.width, "x", imageStack.pendingImage.height)
+                    console.log("  - visible:", imageStack.pendingImage.visible)
+                    console.log("  - opacity:", imageStack.pendingImage.opacity)
+                    // Connect to statusChanged to replace when loaded
+                    // Note: statusChanged signal is automatically available via property alias
+                    if (imageStack.pendingImage.statusChanged) {
+                        imageStack.pendingImage.statusChanged.connect(imageStack.replaceWhenLoaded)
+                        console.log("Connected to statusChanged signal")
+                    } else {
+                        console.warn("statusChanged signal not available!")
+                    }
+                    // Try to replace immediately (will wait if still loading)
+                    imageStack.replaceWhenLoaded()
+                } else {
+                    console.error("Failed to create image component:", component ? component.errorString() : "component is null")
+                    root.loading = false
+                }
+            } else {
+                console.error("Image component not ready. Status:", component ? component.status : "null", "Error:", component ? component.errorString() : "component is null")
+                // Fallback: try to create component on the fly
+                if (!component || component.status === Component.Error) {
+                    console.log("Attempting to reload ImageComponent")
+                    imageStack.imageComponent = Qt.createComponent("ImageComponent.qml", imageStack)
+                }
+                root.loading = false
+            }
         }
     }
     

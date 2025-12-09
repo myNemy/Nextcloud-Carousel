@@ -287,7 +287,7 @@ WallpaperItem {
                             }
                         }
                         if (!isRecent) {
-                            availableIndices.push(i)
+                        availableIndices.push(i)
                         }
                     }
                 }
@@ -372,10 +372,10 @@ WallpaperItem {
             
             // Disconnect VideoOutput to force memory release
             if (mediaPlayer.videoOutput === videoOutput) {
-                mediaPlayer.videoOutput = null
+            mediaPlayer.videoOutput = null
             }
             
-            console.log("✅ Aggressive cleanup completed")
+                console.log("✅ Aggressive cleanup completed")
         }
     }
 
@@ -487,7 +487,7 @@ WallpaperItem {
                     console.log("Video finished, switching to next...")
                     // Small delay to ensure video is fully stopped before switching
                     Qt.callLater(function() {
-                        videoController.nextVideo()
+                videoController.nextVideo()
                     })
                 }
             }
