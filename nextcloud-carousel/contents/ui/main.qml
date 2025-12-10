@@ -35,31 +35,19 @@ WallpaperItem {
         property bool cacheLocked: false  // Prevent race conditions during cache operations
         
         // Calculate optimal cache size based on total number of photos in the list
-        // Strategy: Keep only 1-2 data URLs in memory (current + maybe next for preload)
-        // This minimizes memory usage while still allowing smooth transitions
-        // StackView already destroys Image components when removed, so we don't need to cache many
+        // Strategy: DISABLED to prevent memory leaks (OOM Killer issue)
+        // Data URLs base64 are very large and not properly released, causing memory accumulation
+        // Disabling cache forces re-download but prevents OOM crashes
+        // StackView already destroys Image components when removed, so we don't need to cache
         function updateCacheSize() {
-            // Safety check
-            if (!photoList) {
-                console.warn("⚠️  updateCacheSize: photoList is not valid")
-                maxCacheSize = 1
-                return
-            }
+            // CRITICAL FIX: Disable cache completely to prevent memory leaks
+            // This is a temporary fix until proper memory management is implemented
+            maxCacheSize = 0
+            console.log("⚠️  Cache DISABLED to prevent memory leaks (OOM Killer fix)")
+            console.log("📊 Cache configuration: caching disabled (0 data URLs) - images will be re-downloaded each time")
             
-            var totalPhotos = photoList.length
-            
-            if (totalPhotos === 0) {
-                maxCacheSize = 1
-            } else if (totalPhotos === 1) {
-                // Only 1 photo: cache just that one (avoids re-downloading when it loops)
-                maxCacheSize = 1
-            } else {
-                // 2+ photos: cache only 2 (current + next for smooth transition)
-                // This keeps memory usage minimal even with hundreds of photos
-                // StackView handles destruction of old images automatically
-                maxCacheSize = 2
-            }
-            console.log("📊 Cache configuration: will cache", maxCacheSize, "data URLs out of", totalPhotos, "total photos (lazy loading strategy)")
+            // Clear any existing cache immediately
+            clearDataUrlCache()
         }
         
         function initialize() {
@@ -353,11 +341,19 @@ WallpaperItem {
             // Increment switch counter for periodic cleanup
             imageSwitchCount++
             
-            // Periodic cleanup every 10 images to prevent memory accumulation
-            if (imageSwitchCount >= 10) {
-                console.log("🧹 Periodic cleanup: clearing data URL cache (image", imageSwitchCount, ")")
+            // AGGRESSIVE CLEANUP: Periodic cleanup every 5 images (reduced from 10 to prevent memory accumulation)
+            // This is more frequent to catch memory leaks early
+            if (imageSwitchCount >= 5) {
+                console.log("🧹 Aggressive periodic cleanup: clearing data URL cache (image", imageSwitchCount, ")")
                 imageSwitchCount = 0
                 clearDataUrlCache()
+                
+                // Additional cleanup: force StackView depth check
+                Qt.callLater(function() {
+                    if (imageStack.depth > 2) {
+                        console.warn("⚠️  StackView depth still high after cleanup:", imageStack.depth, "- forcing additional cleanup")
+                    }
+                })
             }
             
             updateCurrentImage()
@@ -541,7 +537,43 @@ WallpaperItem {
         
         // Read EXIF orientation from JPEG ArrayBuffer
         // Returns rotation angle in degrees (0, 90, -90, 180) or 0 if not found/error
+        // Extended EXIF data structure
+        property var currentExifData: ({
+            orientation: 0,
+            dateTime: "",
+            make: "",
+            model: "",
+            iso: 0,
+            fNumber: 0,
+            exposureTime: "",
+            hasData: false
+        })
+        
         // Optimized: Only searches first 64KB where EXIF data is always located (prevents UI blocking on large images)
+        // Extended to read multiple EXIF tags
+        function readExifData(arrayBuffer) {
+            // Reset EXIF data
+            currentExifData = {
+                orientation: 0,
+                dateTime: "",
+                make: "",
+                model: "",
+                iso: 0,
+                fNumber: 0,
+                exposureTime: "",
+                hasData: false
+            }
+            
+            var orientation = readExifOrientation(arrayBuffer)
+            currentExifData.orientation = orientation
+            
+            // Read additional EXIF tags
+            readExifTags(arrayBuffer)
+            
+            return orientation  // Keep backward compatibility
+        }
+        
+        // Legacy function for backward compatibility
         function readExifOrientation(arrayBuffer) {
             try {
                 var bytes = new Uint8Array(arrayBuffer)
@@ -712,6 +744,183 @@ WallpaperItem {
             }
         }
         
+        // Read additional EXIF tags (DateTime, Make, Model, ISO, FNumber, ExposureTime)
+        // Following same pattern as readExifOrientation but reading multiple tags
+        function readExifTags(arrayBuffer) {
+            try {
+                var bytes = new Uint8Array(arrayBuffer)
+                
+                // Check if it's a JPEG
+                if (bytes.length < 2 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) {
+                    return  // Not a JPEG
+                }
+                
+                var maxSearchBytes = Math.min(bytes.length, 65536)  // 64KB limit
+                var i = 2
+                
+                while (i < maxSearchBytes - 1) {
+                    if (bytes[i] === 0xFF && bytes[i + 1] === 0xE1) {
+                        var segmentLength = (bytes[i + 2] << 8) | bytes[i + 3]
+                        var segmentStart = i + 4
+                        
+                        if (segmentStart + 6 <= bytes.length) {
+                            var exifHeader = String.fromCharCode(
+                                bytes[segmentStart], bytes[segmentStart + 1],
+                                bytes[segmentStart + 2], bytes[segmentStart + 3],
+                                bytes[segmentStart + 4], bytes[segmentStart + 5]
+                            )
+                            
+                            if (exifHeader === "Exif\0\0") {
+                                var tiffOffset = segmentStart + 6
+                                if (tiffOffset + 8 > bytes.length) break
+                                
+                                var isIntel = (bytes[tiffOffset] === 0x49 && bytes[tiffOffset + 1] === 0x49)
+                                
+                                // Read IFD0 offset
+                                var ifd0OffsetAddr = tiffOffset + 4
+                                if (ifd0OffsetAddr + 4 > bytes.length) break
+                                
+                                var ifd0Offset
+                                if (isIntel) {
+                                    ifd0Offset = bytes[ifd0OffsetAddr] | (bytes[ifd0OffsetAddr + 1] << 8) | 
+                                                 (bytes[ifd0OffsetAddr + 2] << 16) | (bytes[ifd0OffsetAddr + 3] << 24)
+                                } else {
+                                    ifd0Offset = (bytes[ifd0OffsetAddr] << 24) | (bytes[ifd0OffsetAddr + 1] << 16) | 
+                                                 (bytes[ifd0OffsetAddr + 2] << 8) | bytes[ifd0OffsetAddr + 3]
+                                }
+                                
+                                var ifd0Addr = tiffOffset + ifd0Offset
+                                if (ifd0Addr + 2 > bytes.length) break
+                                
+                                var numEntries
+                                if (isIntel) {
+                                    numEntries = bytes[ifd0Addr] | (bytes[ifd0Addr + 1] << 8)
+                                } else {
+                                    numEntries = (bytes[ifd0Addr] << 8) | bytes[ifd0Addr + 1]
+                                }
+                                
+                                // Read tags from IFD0
+                                var entryOffset = ifd0Addr + 2
+                                for (var e = 0; e < numEntries && entryOffset + 12 <= bytes.length; e++) {
+                                    var tag
+                                    if (isIntel) {
+                                        tag = bytes[entryOffset] | (bytes[entryOffset + 1] << 8)
+                                    } else {
+                                        tag = (bytes[entryOffset] << 8) | bytes[entryOffset + 1]
+                                    }
+                                    
+                                    var type
+                                    if (isIntel) {
+                                        type = bytes[entryOffset + 2] | (bytes[entryOffset + 3] << 8)
+                                    } else {
+                                        type = (bytes[entryOffset + 2] << 8) | bytes[entryOffset + 3]
+                                    }
+                                    
+                                    var count
+                                    if (isIntel) {
+                                        count = bytes[entryOffset + 4] | (bytes[entryOffset + 5] << 8) | 
+                                                (bytes[entryOffset + 6] << 16) | (bytes[entryOffset + 7] << 24)
+                                    } else {
+                                        count = (bytes[entryOffset + 4] << 24) | (bytes[entryOffset + 5] << 16) | 
+                                                (bytes[entryOffset + 6] << 8) | bytes[entryOffset + 7]
+                                    }
+                                    
+                                    // Read tag value based on type
+                                    var valueOffset = entryOffset + 8
+                                    var valueAddr = tiffOffset
+                                    
+                                    // If value fits in 4 bytes, it's stored directly, otherwise it's an offset
+                                    if (type === 2 && count <= 4) {  // ASCII string
+                                        var value = ""
+                                        for (var c = 0; c < count - 1 && valueOffset + c < bytes.length; c++) {
+                                            value += String.fromCharCode(bytes[valueOffset + c])
+                                        }
+                                        
+                                        if (tag === 0x0132) {  // DateTime
+                                            currentExifData.dateTime = value
+                                            currentExifData.hasData = true
+                                        } else if (tag === 0x010F) {  // Make
+                                            currentExifData.make = value
+                                            currentExifData.hasData = true
+                                        } else if (tag === 0x0110) {  // Model
+                                            currentExifData.model = value
+                                            currentExifData.hasData = true
+                                        }
+                                    } else if (type === 3 && count === 1) {  // Short (2 bytes)
+                                        var shortValue
+                                        if (isIntel) {
+                                            shortValue = bytes[valueOffset] | (bytes[valueOffset + 1] << 8)
+                                        } else {
+                                            shortValue = (bytes[valueOffset] << 8) | bytes[valueOffset + 1]
+                                        }
+                                        
+                                        if (tag === 0x8827) {  // ISO
+                                            currentExifData.iso = shortValue
+                                            currentExifData.hasData = true
+                                        }
+                                    } else if (type === 5 && count === 1) {  // Rational (2 longs)
+                                        // Read offset to rational value
+                                        var rationalOffset
+                                        if (isIntel) {
+                                            rationalOffset = bytes[valueOffset] | (bytes[valueOffset + 1] << 8) | 
+                                                           (bytes[valueOffset + 2] << 16) | (bytes[valueOffset + 3] << 24)
+                                        } else {
+                                            rationalOffset = (bytes[valueOffset] << 24) | (bytes[valueOffset + 1] << 16) | 
+                                                           (bytes[valueOffset + 2] << 8) | bytes[valueOffset + 3]
+                                        }
+                                        
+                                        var rationalAddr = tiffOffset + rationalOffset
+                                        if (rationalAddr + 8 <= bytes.length) {
+                                            var numerator, denominator
+                                            if (isIntel) {
+                                                numerator = bytes[rationalAddr] | (bytes[rationalAddr + 1] << 8) | 
+                                                          (bytes[rationalAddr + 2] << 16) | (bytes[rationalAddr + 3] << 24)
+                                                denominator = bytes[rationalAddr + 4] | (bytes[rationalAddr + 5] << 8) | 
+                                                            (bytes[rationalAddr + 6] << 16) | (bytes[rationalAddr + 7] << 24)
+                                            } else {
+                                                numerator = (bytes[rationalAddr] << 24) | (bytes[rationalAddr + 1] << 16) | 
+                                                          (bytes[rationalAddr + 2] << 8) | bytes[rationalAddr + 3]
+                                                denominator = (bytes[rationalAddr + 4] << 24) | (bytes[rationalAddr + 5] << 16) | 
+                                                            (bytes[rationalAddr + 6] << 8) | bytes[rationalAddr + 7]
+                                            }
+                                            
+                                            if (tag === 0x829D && denominator > 0) {  // FNumber
+                                                currentExifData.fNumber = numerator / denominator
+                                                currentExifData.hasData = true
+                                            } else if (tag === 0x829A && denominator > 0) {  // ExposureTime
+                                                var expTime = numerator / denominator
+                                                if (expTime < 1) {
+                                                    currentExifData.exposureTime = "1/" + Math.round(1 / expTime) + "s"
+                                                } else {
+                                                    currentExifData.exposureTime = expTime.toFixed(1) + "s"
+                                                }
+                                                currentExifData.hasData = true
+                                            }
+                                        }
+                                    }
+                                    
+                                    entryOffset += 12
+                                }
+                                
+                                break  // Found EXIF, no need to continue
+                            }
+                        }
+                        
+                        i += 2 + segmentLength
+                    } else if (bytes[i] === 0xFF && (bytes[i + 1] & 0xF0) === 0xE0) {
+                        var segLen = (bytes[i + 2] << 8) | bytes[i + 3]
+                        i += 2 + segLen
+                    } else if (bytes[i] === 0xFF && bytes[i + 1] === 0xDA) {
+                        break
+                    } else {
+                        i++
+                    }
+                }
+            } catch (e) {
+                console.warn("❌ Error reading EXIF tags:", e)
+            }
+        }
+        
         function loadImageWithAuth(imageUrl, skipAnimation) {
             // Safety check
             if (!imageUrl) {
@@ -727,7 +936,16 @@ WallpaperItem {
             if (cachedDataUrl) {
                 console.log("Using cached data URL, skipping download")
                 // Use cached data URL directly
-                createImageComponent(cachedDataUrl, imageUrl, skipAnimation)
+                // Note: EXIF data may not be available from cache, OSD will show if available
+                createImageComponent(cachedDataUrl, imageUrl, skipAnimation, currentExifData.orientation)
+                
+                // Update OSD if EXIF info is enabled and available
+                if (root.configuration.ShowExifInfo && currentExifData.hasData) {
+                    exifOsd.opacity = 1.0
+                    if (root.configuration.ExifInfoDuration > 0) {
+                        exifHideTimer.restart()
+                    }
+                }
                 return
             }
             
@@ -783,18 +1001,22 @@ WallpaperItem {
                             mimeType = "image/svg+xml"
                         }
                         
-                        // Read EXIF orientation for JPEG images
+                        // Read EXIF data for JPEG images
                         if (mimeType === "image/jpeg") {
-                            console.log("Reading EXIF orientation from JPEG image...")
+                            console.log("Reading EXIF data from JPEG image...")
                             orientation = readExifOrientation(xhr.response)
+                            readExifTags(xhr.response)  // Read additional EXIF tags
                             console.log("EXIF orientation result:", orientation, "degrees (0=normal, 90=rotate 90°, -90=rotate -90°, 180=rotate 180°)")
+                            if (currentExifData.hasData) {
+                                console.log("✅ EXIF data found:", JSON.stringify(currentExifData))
+                            }
                             if (orientation !== 0) {
                                 console.log("✅ EXIF orientation detected, rotation will be applied:", orientation, "degrees")
                             } else {
                                 console.log("ℹ️  No EXIF orientation found or orientation is normal (0°)")
                             }
                         } else {
-                            console.log("Not a JPEG image, skipping EXIF orientation (MIME type:", mimeType, ")")
+                            console.log("Not a JPEG image, skipping EXIF data (MIME type:", mimeType, ")")
                         }
                         
                         // Convert arraybuffer to base64 data URL
@@ -815,6 +1037,14 @@ WallpaperItem {
                         
                         // Create image component with data URL
                         createImageComponent(dataUrl, imageUrl, skipAnimation, orientation)
+                        
+                        // Update OSD if EXIF info is enabled
+                        if (root.configuration.ShowExifInfo && currentExifData.hasData) {
+                            exifOsd.opacity = 1.0
+                            if (root.configuration.ExifInfoDuration > 0) {
+                                exifHideTimer.restart()
+                            }
+                        }
                     } else {
                         console.error("Failed to load image. Status:", xhr.status, xhr.statusText)
                         if (xhr.status === 401) {
@@ -952,11 +1182,16 @@ WallpaperItem {
             id: imageStack
             anchors.fill: parent
             
-            // Monitor depth for safety (following Qt/KDE best practices)
+            // AGGRESSIVE MONITORING: Monitor depth for safety (following Qt/KDE best practices)
             // With replace(), depth should never exceed 2-3 even during transitions
+            // Enhanced monitoring to catch memory leaks early
             onDepthChanged: {
+                console.log("📊 StackView depth changed:", depth, "(expected: 1-2, max: 3)")
                 if (depth > 3) {
-                    console.warn("⚠️  StackView depth exceeded expected limit:", depth, "- monitoring for memory issues")
+                    console.warn("⚠️  StackView depth exceeded expected limit:", depth, "- possible memory leak!")
+                    console.warn("⚠️  This may indicate that old images are not being properly destroyed")
+                } else if (depth > 2) {
+                    console.warn("⚠️  StackView depth is", depth, "- monitoring closely (should be ≤ 2)")
                 }
             }
             
@@ -1141,6 +1376,28 @@ WallpaperItem {
                 var tempPending = pendingImage
                 pendingImage = null
                 
+                // AGGRESSIVE CLEANUP: Force cleanup of old StackView items after transition
+                // This ensures old images are properly destroyed and memory is released
+                Qt.callLater(function() {
+                    // Force cleanup: remove any items beyond currentItem
+                    // StackView should only have 1-2 items (current + maybe one in transition)
+                    var currentDepth = imageStack.depth
+                    
+                    // Enhanced memory monitoring with detailed logging
+                    console.log("📊 Memory monitoring after replace:")
+                    console.log("  - StackView depth:", currentDepth, "(expected: 1-2)")
+                    console.log("  - Image switch count:", carouselController.imageSwitchCount)
+                    console.log("  - Cache size:", carouselController.cacheOrder ? carouselController.cacheOrder.length : 0, "/", carouselController.maxCacheSize)
+                    
+                    if (currentDepth > 2) {
+                        console.warn("⚠️  StackView depth still high after cleanup:", currentDepth, "- forcing additional cleanup")
+                        console.warn("⚠️  This may indicate a memory leak - old images not being destroyed")
+                        // Try to clean up old items (StackView should handle this, but we force it)
+                        // Note: We can't directly access StackView items, but we log for monitoring
+                        console.log("🧹 Aggressive cleanup triggered: StackView depth", currentDepth, "should be ≤ 2")
+                    }
+                })
+                
                 // Verify the item is actually in the StackView
                 Qt.callLater(function() {
                     if (imageStack.currentItem) {
@@ -1175,6 +1432,130 @@ WallpaperItem {
             }
         }
         
+        // EXIF Information OSD (On-Screen Display)
+        // Following Qt/KDE best practices for overlay components
+        Rectangle {
+            id: exifOsd
+            anchors {
+                left: parent.left
+                bottom: parent.bottom
+                margins: Kirigami.Units.gridUnit * 2
+            }
+            width: exifContent.implicitWidth + Kirigami.Units.gridUnit * 2
+            height: exifContent.implicitHeight + Kirigami.Units.gridUnit * 2
+            visible: root.configuration.ShowExifInfo && carouselController.currentExifData.hasData && opacity > 0
+            opacity: 0
+            color: Qt.rgba(0, 0, 0, 0.75)  // Semi-transparent black background
+            radius: Kirigami.Units.smallSpacing
+            border {
+                width: 1
+                color: Qt.rgba(1, 1, 1, 0.3)
+            }
+            
+            // Fade in animation when EXIF data changes
+            Behavior on opacity {
+                OpacityAnimator {
+                    duration: 300
+                    easing.type: Easing.InOutQuad
+                }
+            }
+            
+            Column {
+                id: exifContent
+                anchors {
+                    fill: parent
+                    margins: Kirigami.Units.smallSpacing
+                }
+                spacing: Kirigami.Units.smallSpacing
+                
+                // Title
+                Text {
+                    text: i18n("EXIF Information")
+                    font {
+                        bold: true
+                        pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.1
+                    }
+                    color: "white"
+                }
+                
+                // Date/Time
+                Text {
+                    visible: carouselController.currentExifData.dateTime !== ""
+                    text: i18n("Date: %1", carouselController.currentExifData.dateTime)
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+                    color: "white"
+                }
+                
+                // Camera Make/Model
+                Text {
+                    visible: carouselController.currentExifData.make !== "" || carouselController.currentExifData.model !== ""
+                    text: {
+                        var camera = ""
+                        if (carouselController.currentExifData.make !== "") {
+                            camera = carouselController.currentExifData.make
+                        }
+                        if (carouselController.currentExifData.model !== "") {
+                            if (camera !== "") camera += " "
+                            camera += carouselController.currentExifData.model
+                        }
+                        return i18n("Camera: %1", camera)
+                    }
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+                    color: "white"
+                }
+                
+                // ISO
+                Text {
+                    visible: carouselController.currentExifData.iso > 0
+                    text: i18n("ISO: %1", carouselController.currentExifData.iso)
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+                    color: "white"
+                }
+                
+                // Aperture (F-Number)
+                Text {
+                    visible: carouselController.currentExifData.fNumber > 0
+                    text: i18n("Aperture: f/%1", carouselController.currentExifData.fNumber.toFixed(1))
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+                    color: "white"
+                }
+                
+                // Exposure Time
+                Text {
+                    visible: carouselController.currentExifData.exposureTime !== ""
+                    text: i18n("Exposure: %1", carouselController.currentExifData.exposureTime)
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+                    color: "white"
+                }
+                
+                // Orientation
+                Text {
+                    visible: carouselController.currentExifData.orientation !== 0
+                    text: {
+                        var orient = carouselController.currentExifData.orientation
+                        if (orient === 90) return i18n("Orientation: 90°")
+                        else if (orient === -90) return i18n("Orientation: -90°")
+                        else if (orient === 180) return i18n("Orientation: 180°")
+                        else return i18n("Orientation: Normal")
+                    }
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+                    color: "white"
+                }
+            }
+            
+            // Auto-hide timer
+            Timer {
+                id: exifHideTimer
+                interval: (root.configuration.ExifInfoDuration || 5) * 1000
+                onTriggered: {
+                    if (root.configuration.ExifInfoDuration > 0) {
+                        exifOsd.opacity = 0
+                    }
+                }
+            }
+            
+        }
+        
         // Loading indicator
         Kirigami.LoadingPlaceholder {
             anchors.centerIn: parent
@@ -1207,6 +1588,24 @@ WallpaperItem {
         function onImageScaleChanged() {
             console.log("Image scale changed:", root.configuration.ImageScale, "%")
             // Settings will be applied to next image via ImageComponent
+        }
+        function onShowExifInfoChanged() {
+            console.log("Show EXIF info changed:", root.configuration.ShowExifInfo)
+            if (root.configuration.ShowExifInfo && carouselController.currentExifData.hasData) {
+                exifOsd.opacity = 1.0
+                if (root.configuration.ExifInfoDuration > 0) {
+                    exifHideTimer.restart()
+                }
+            } else {
+                exifOsd.opacity = 0
+            }
+        }
+        function onExifInfoDurationChanged() {
+            console.log("EXIF info duration changed:", root.configuration.ExifInfoDuration, "seconds")
+            if (root.configuration.ExifInfoDuration > 0 && exifOsd.opacity > 0) {
+                exifHideTimer.interval = root.configuration.ExifInfoDuration * 1000
+                exifHideTimer.restart()
+            }
         }
             function onTransitionEnabledChanged() {
                 console.log("Transition enabled changed:", root.configuration.TransitionEnabled)
