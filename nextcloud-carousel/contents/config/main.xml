@@ -74,6 +74,16 @@
       <label>Show loading indicator when loading images</label>
       <default>true</default>
     </entry>
+    <entry name="ShowExifInfo" type="bool">
+      <label>Show EXIF information overlay (OSD)</label>
+      <default>false</default>
+    </entry>
+    <entry name="ExifInfoDuration" type="int">
+      <label>EXIF info display duration (seconds, 0 = always visible)</label>
+      <default>5</default>
+      <min>0</min>
+      <max>30</max>
+    </entry>
   </group>
 </kcfg>
 

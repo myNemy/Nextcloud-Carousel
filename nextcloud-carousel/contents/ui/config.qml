@@ -28,6 +28,8 @@ Kirigami.FormLayout {
     property alias cfg_ImageScale: imageScaleSlider.value
     property alias cfg_Color: colorButton.color
     property alias cfg_ShowLoadingIndicator: showLoadingIndicatorCheckBox.checked
+    property alias cfg_ShowExifInfo: showExifInfoCheckBox.checked
+    property alias cfg_ExifInfoDuration: exifInfoDurationField.text
     property alias formLayout: root
 
     QtControls2.TextField {
@@ -239,5 +241,28 @@ Kirigami.FormLayout {
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Display a visual indicator while images are being loaded from Nextcloud")
+    }
+
+    QtControls2.CheckBox {
+        id: showExifInfoCheckBox
+        Kirigami.FormData.label: i18n("EXIF Information:")
+        text: i18n("Show EXIF information overlay (OSD)")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Display EXIF metadata (date, camera, ISO, etc.) as an overlay when images change")
+    }
+
+    QtControls2.TextField {
+        id: exifInfoDurationField
+        Kirigami.FormData.label: i18n("EXIF Info Duration (seconds):")
+        placeholderText: i18n("5")
+        enabled: showExifInfoCheckBox.checked
+        validator: IntValidator {
+            bottom: 0
+            top: 30
+        }
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("How long to show EXIF information (0 = always visible, 1-30 = auto-hide after N seconds)")
     }
 }

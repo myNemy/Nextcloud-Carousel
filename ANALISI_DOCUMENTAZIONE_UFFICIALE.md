@@ -1,6 +1,6 @@
 # Analisi Conformità Documentazione Ufficiale Qt/KDE
 
-**Data Analisi**: 2024  
+**Data Analisi**: 2024-12-09  
 **Versione Qt**: Qt 6.x  
 **Versione KDE**: KDE Frameworks 6  
 **Plugin Analizzati**: Nextcloud Carousel e Nextcloud Video
@@ -30,8 +30,9 @@ Questa analisi confronta il codice dei plugin Nextcloud Carousel e Nextcloud Vid
    - Qt 6 QML Memory Management: https://doc.qt.io/qt-6/qtqml-memorymanagement.html
 
 2. **Documentazione ufficiale KDE Plasma**:
-   - KDE Plasma Wallpaper Plugin API: https://develop.kde.org/docs/plasma/wallpaper/
-   - Plugin di riferimento: `org.kde.slideshow` (implementazione ufficiale)
+   - KDE Developer Documentation: https://develop.kde.org/docs/
+   - KDE Frameworks API: https://api.kde.org/frameworks/
+   - Plugin di riferimento: `org.kde.slideshow` (implementazione ufficiale, location: `/usr/share/plasma/wallpapers/org.kde.slideshow/`)
 
 3. **Best Practices Qt/KDE**:
    - Qt Coding Style: https://wiki.qt.io/Qt_Coding_Style
@@ -657,7 +658,7 @@ I problemi identificati sono **minori** e riguardano principalmente:
 
 ---
 
-**Analisi completata**: 2024  
+**Analisi completata**: 2024-12-09  
 **Analista**: AI Assistant  
-**Versione Documentazione Consultata**: Qt 6.x, KDE Frameworks 6
+**Versione Documentazione Consultata**: Qt 6.10.1, KDE Frameworks 6
 

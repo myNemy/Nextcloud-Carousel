@@ -235,3 +235,67 @@ msgstr "Mostra indicatore di caricamento durante il caricamento delle immagini"
 msgid "Display a visual indicator while images are being loaded from Nextcloud"
 msgstr "Mostra un indicatore visivo mentre le immagini vengono caricate da Nextcloud"
 
+#: contents/ui/config.qml:248
+msgid "EXIF Information:"
+msgstr "Informazioni EXIF:"
+
+#: contents/ui/config.qml:249
+msgid "Show EXIF information overlay (OSD)"
+msgstr "Mostra overlay informazioni EXIF (OSD)"
+
+#: contents/ui/config.qml:252
+msgid "Display EXIF metadata (date, camera, ISO, etc.) as an overlay when images change"
+msgstr "Mostra metadati EXIF (data, fotocamera, ISO, ecc.) come overlay quando cambiano le immagini"
+
+#: contents/ui/config.qml:256
+msgid "EXIF Info Duration (seconds):"
+msgstr "Durata Info EXIF (secondi):"
+
+#: contents/ui/config.qml:260
+msgid "5"
+msgstr "5"
+
+#: contents/ui/config.qml:264
+msgid "How long to show EXIF information (0 = always visible, 1-30 = auto-hide after N seconds)"
+msgstr "Quanto tempo mostrare le informazioni EXIF (0 = sempre visibile, 1-30 = nascondi automaticamente dopo N secondi)"
+
+#: contents/ui/main.qml
+msgid "EXIF Information"
+msgstr "Informazioni EXIF"
+
+#: contents/ui/main.qml
+msgid "Date: %1"
+msgstr "Data: %1"
+
+#: contents/ui/main.qml
+msgid "Camera: %1"
+msgstr "Fotocamera: %1"
+
+#: contents/ui/main.qml
+msgid "ISO: %1"
+msgstr "ISO: %1"
+
+#: contents/ui/main.qml
+msgid "Aperture: f/%1"
+msgstr "Apertura: f/%1"
+
+#: contents/ui/main.qml
+msgid "Exposure: %1"
+msgstr "Esposizione: %1"
+
+#: contents/ui/main.qml
+msgid "Orientation: 90°"
+msgstr "Orientamento: 90°"
+
+#: contents/ui/main.qml
+msgid "Orientation: -90°"
+msgstr "Orientamento: -90°"
+
+#: contents/ui/main.qml
+msgid "Orientation: 180°"
+msgstr "Orientamento: 180°"
+
+#: contents/ui/main.qml
+msgid "Orientation: Normal"
+msgstr "Orientamento: Normale"
+
