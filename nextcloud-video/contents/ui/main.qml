@@ -155,9 +155,7 @@ WallpaperItem {
                         }
                         
                         console.log("Found", videos.length, "videos")
-                        if (videos.length > 0) {
-                            console.log("First video URL:", videos[0].replace(/https?:\/\/[^@]+@/, ""))
-                        } else {
+                        if (videos.length === 0) {
                             console.warn("No videos found! XML response preview:", xmlText.substring(0, 500))
                         }
                         videoList = videos
@@ -335,8 +333,10 @@ WallpaperItem {
         function updateCurrentVideo() {
             if (currentIndex >= 0 && currentIndex < videoList.length) {
                 var videoUrl = videoList[currentIndex]
-                console.log("Loading video", currentIndex + 1, "of", videoList.length)
-                console.log("Video URL (without auth):", videoUrl.replace(/https?:\/\/[^@]+@/, ""))
+                // Reduced logging verbosity - only log every 10th video to prevent log bloat
+                if (currentIndex % 10 === 0 || currentIndex === 0) {
+                    console.log("Loading video", currentIndex + 1, "of", videoList.length)
+                }
                 
                 // Increment switch counter for periodic reset
                 videoSwitchCount++
@@ -344,7 +344,6 @@ WallpaperItem {
                 // Periodic aggressive cleanup every 5 videos to prevent memory accumulation
                 var needsExtraCleanup = (videoSwitchCount >= 5)
                 if (needsExtraCleanup) {
-                    console.log("⚠️  Periodic reset: performing extra aggressive cleanup (video", videoSwitchCount, ")")
                     videoSwitchCount = 0
                     isCleaningUp = true
                     performAggressiveCleanup()
@@ -368,8 +367,6 @@ WallpaperItem {
         }
         
         function performAggressiveCleanup() {
-            console.log("🔧 Performing aggressive MediaPlayer cleanup...")
-            
             // Stop and clear completely
             if (mediaPlayer.playbackState !== MediaPlayer.StoppedState) {
                 mediaPlayer.stop()
@@ -381,8 +378,6 @@ WallpaperItem {
             if (mediaPlayer.videoOutput === videoOutput) {
             mediaPlayer.videoOutput = null
             }
-            
-                console.log("✅ Aggressive cleanup completed")
         }
     }
 
@@ -394,7 +389,6 @@ WallpaperItem {
         repeat: false
         onTriggered: {
             if (!root.configuration.LoopVideo) {
-                console.log("Video interval elapsed, switching to next video...")
                 videoController.nextVideo()
             }
         }
@@ -411,7 +405,6 @@ WallpaperItem {
         onTriggered: {
             // Show loading indicator
             root.loading = true
-            console.log("Loading new video...")
             
             // Reconnect VideoOutput if it was disconnected during aggressive cleanup
             if (mediaPlayer.videoOutput !== videoOutput) {
@@ -473,10 +466,8 @@ WallpaperItem {
         loops: root.configuration.LoopVideo ? MediaPlayer.Infinite : 1
         
         onPlaybackStateChanged: {
-            console.log("MediaPlayer playback state changed:", playbackState)
             if (playbackState === MediaPlayer.PlayingState) {
                 // Video started playing, hide loading indicator
-                console.log("Video started playing, hiding loading indicator")
                 root.loading = false
                 videoController.isCleaningUp = false  // Clear cleanup flag when video starts
                 
@@ -485,13 +476,11 @@ WallpaperItem {
                     videoTimer.restart()
                 }
             } else if (playbackState === MediaPlayer.LoadingState) {
-                console.log("Video is loading...")
                 root.loading = true
             } else if (playbackState === MediaPlayer.StoppedState) {
                 // Video finished - stop timer and switch if not looping
                 videoTimer.stop()
                 if (!root.configuration.LoopVideo) {
-                    console.log("Video finished, switching to next...")
                     // Small delay to ensure video is fully stopped before switching
                     Qt.callLater(function() {
                 videoController.nextVideo()
@@ -501,10 +490,7 @@ WallpaperItem {
         }
         
         onMediaStatusChanged: {
-            console.log("MediaPlayer status changed:", mediaStatus)
-            if (mediaStatus === MediaPlayer.LoadedMedia) {
-                console.log("Video media loaded successfully")
-            } else if (mediaStatus === MediaPlayer.InvalidMedia) {
+            if (mediaStatus === MediaPlayer.InvalidMedia) {
                 console.error("Invalid media, trying next video")
                 root.loading = false
                 Qt.callLater(function() {

@@ -159,10 +159,7 @@ WallpaperItem {
                         }
                         
                         console.log("Found", images.length, "images")
-                        if (images.length > 0) {
-                            console.log("First image URL:", images[0].replace(/https?:\/\/[^@]+@/, ""))
-                            console.log("Sample paths found:", paths.slice(0, 3))
-                        } else {
+                        if (images.length === 0) {
                             console.warn("No images found! XML response preview:", xmlText.substring(0, 500))
                             console.warn("Paths extracted:", paths)
                         }
@@ -341,17 +338,15 @@ WallpaperItem {
             // Increment switch counter for periodic cleanup
             imageSwitchCount++
             
-            // AGGRESSIVE CLEANUP: Periodic cleanup every 5 images (reduced from 10 to prevent memory accumulation)
-            // This is more frequent to catch memory leaks early
+            // Periodic cleanup every 5 images to prevent memory accumulation
             if (imageSwitchCount >= 5) {
-                console.log("🧹 Aggressive periodic cleanup: clearing data URL cache (image", imageSwitchCount, ")")
                 imageSwitchCount = 0
                 clearDataUrlCache()
                 
-                // Additional cleanup: force StackView depth check
+                // Additional cleanup: force StackView depth check (only log warnings)
                 Qt.callLater(function() {
                     if (imageStack.depth > 2) {
-                        console.warn("⚠️  StackView depth still high after cleanup:", imageStack.depth, "- forcing additional cleanup")
+                        console.warn("⚠️  StackView depth still high after cleanup:", imageStack.depth)
                     }
                 })
             }
@@ -369,16 +364,10 @@ WallpaperItem {
             
             try {
                 cacheLocked = true
-                // Use cacheOrder.length instead of Object.keys() for QML compatibility
-                var cacheSize = cacheOrder ? cacheOrder.length : 0
-                console.log("Clearing data URL cache, current size:", cacheSize, "entries")
                 
                 // Clear cache by creating new objects (safer than delete in QML)
                 dataUrlCache = {}
                 cacheOrder = []
-                
-                // Force garbage collection hint (QML will handle it)
-                console.log("✅ Data URL cache cleared")
             } catch (e) {
                 console.error("❌ Error clearing cache:", e)
                 // Reset to safe state
@@ -421,7 +410,6 @@ WallpaperItem {
                     }
                     currentOrder.push(imageUrl)
                     cacheOrder = currentOrder  // Replace entire array (atomic)
-                    console.log("✅ Data URL found in cache for:", imageUrl.replace(/https?:\/\/[^@]+@/, ""))
                     return dataUrlCache[imageUrl]
                 }
             } catch (e) {
@@ -479,7 +467,6 @@ WallpaperItem {
                                 }
                             }
                             dataUrlCache = newCache
-                            console.log("🗑️  Evicted oldest data URL from cache:", oldestUrl.replace(/https?:\/\/[^@]+@/, ""))
                         }
                     }
                 }
@@ -488,7 +475,6 @@ WallpaperItem {
                 dataUrlCache[imageUrl] = dataUrl
                 currentOrder.push(imageUrl)
                 cacheOrder = currentOrder  // Replace entire array (atomic)
-                console.log("💾 Cached data URL, cache size:", cacheOrder.length, "/", maxCacheSize)
             } catch (e) {
                 console.error("❌ Error in cacheDataUrl:", e)
                 // Don't crash, just log the error
@@ -498,8 +484,10 @@ WallpaperItem {
         function updateCurrentImage() {
             if (currentIndex >= 0 && currentIndex < photoList.length) {
                 var photoUrl = photoList[currentIndex]
-                console.log("Loading image", currentIndex + 1, "of", photoList.length)
-                console.log("Image URL (without auth):", photoUrl.replace(/https?:\/\/[^@]+@/, ""))
+                // Reduced logging verbosity - only log every 10th image to prevent log bloat
+                if (currentIndex % 10 === 0 || currentIndex === 0) {
+                    console.log("Loading image", currentIndex + 1, "of", photoList.length)
+                }
                 
                 // Image component doesn't support auth in URL, so we need to download it
                 loadImageWithAuth(photoUrl)
@@ -577,22 +565,15 @@ WallpaperItem {
         function readExifOrientation(arrayBuffer) {
             try {
                 var bytes = new Uint8Array(arrayBuffer)
-                console.log("readExifOrientation: Image size:", bytes.length, "bytes")
-                
                 // Check if it's a JPEG (starts with 0xFFD8)
                 if (bytes.length < 2 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) {
-                    console.log("⚠️  Not a JPEG image (first bytes:", bytes[0], bytes[1], "), skipping EXIF orientation")
                     return 0  // Not a JPEG, assume normal orientation
                 }
-                console.log("✅ JPEG header found (0xFFD8)")
                 
                 // Optimize: EXIF data is always in the first segments (typically < 64KB)
                 // Limit search to first 64KB to prevent UI blocking on very large images
                 // This follows QML best practices for heavy operations
                 var maxSearchBytes = Math.min(bytes.length, 65536)  // 64KB limit
-                if (bytes.length > 65536) {
-                    console.log("ℹ️  Large image detected, limiting EXIF search to first 64KB (optimization)")
-                }
                 
                 // Search for APP1 marker (0xFFE1) which contains EXIF data
                 var i = 2  // Start after SOI marker
@@ -601,11 +582,9 @@ WallpaperItem {
                     // Check for APP1 marker
                     if (bytes[i] === 0xFF && bytes[i + 1] === 0xE1) {
                         app1Found = true
-                        console.log("✅ APP1 marker found at offset:", i)
                         // Found APP1 segment
                         var segmentLength = (bytes[i + 2] << 8) | bytes[i + 3]
                         var segmentStart = i + 4
-                        console.log("  Segment length:", segmentLength, "Segment start:", segmentStart)
                         
                         // Check if it's an EXIF segment (starts with "Exif\0\0")
                         if (segmentStart + 6 <= bytes.length) {
@@ -617,10 +596,8 @@ WallpaperItem {
                                 bytes[segmentStart + 4],
                                 bytes[segmentStart + 5]
                             )
-                            console.log("  Header check:", exifHeader, "===", "Exif\0\0", "?", exifHeader === "Exif\0\0")
                             
                             if (exifHeader === "Exif\0\0") {
-                                console.log("✅ EXIF segment found!")
                                 // Found EXIF segment, now find Orientation tag (0x0112)
                                 // EXIF structure: TIFF header (8 bytes) + IFD0
                                 var tiffOffset = segmentStart + 6
@@ -668,7 +645,6 @@ WallpaperItem {
                                     
                                     // Orientation tag is 0x0112 (274)
                                     if (tag === 0x0112) {
-                                        console.log("✅ Orientation tag (0x0112) found at entry", e)
                                         // Read orientation value (offset 8 from entry start)
                                         var valueOffset = entryOffset + 8
                                         var orientation
@@ -677,7 +653,6 @@ WallpaperItem {
                                         } else {
                                             orientation = (bytes[valueOffset] << 8) | bytes[valueOffset + 1]
                                         }
-                                        console.log("  EXIF orientation value:", orientation, "(1=normal, 3=180°, 6=90°CW, 8=90°CCW)")
                                         
                                         // Convert EXIF orientation to rotation angle
                                         // EXIF orientation values:
@@ -690,24 +665,19 @@ WallpaperItem {
                                         switch (orientation) {
                                         case 1: 
                                             rotationAngle = 0
-                                            console.log("  → Rotation: 0° (normal)")
                                             return rotationAngle
                                         case 3: 
                                             rotationAngle = 180
-                                            console.log("  → Rotation: 180° (upside down)")
                                             return rotationAngle
                                         case 6: 
                                             // Image was rotated 90° clockwise, need to rotate 90° counter-clockwise to correct
                                             rotationAngle = 90
-                                            console.log("  → Rotation: 90° (image was 90°CW, correcting with 90°CCW)")
                                             return rotationAngle
                                         case 8: 
                                             // Image was rotated 90° counter-clockwise, need to rotate 90° clockwise to correct
                                             rotationAngle = -90
-                                            console.log("  → Rotation: -90° (image was 90°CCW, correcting with 90°CW)")
                                             return rotationAngle
                                         default: 
-                                            console.log("  ⚠️  Unknown orientation value:", orientation, "→ assuming 0°")
                                             return 0    // Unknown, assume normal
                                         }
                                     }
@@ -731,12 +701,7 @@ WallpaperItem {
                     }
                 }
                 
-                // Orientation not found
-                if (!app1Found) {
-                    console.log("⚠️  APP1 marker not found in JPEG, no EXIF data")
-                } else {
-                    console.log("⚠️  EXIF segment found but Orientation tag (0x0112) not found in IFD0")
-                }
+                // Orientation not found - silently return 0 (normal orientation)
                 return 0  // Orientation not found, assume normal
             } catch (e) {
                 console.warn("❌ Error reading EXIF orientation:", e)
@@ -934,7 +899,7 @@ WallpaperItem {
             // Check cache first
             var cachedDataUrl = getCachedDataUrl(imageUrl)
             if (cachedDataUrl) {
-                console.log("Using cached data URL, skipping download")
+                // Removed verbose cache hit logging
                 // Use cached data URL directly
                 // Note: EXIF data may not be available from cache, OSD will show if available
                 createImageComponent(cachedDataUrl, imageUrl, skipAnimation, currentExifData.orientation)
@@ -964,7 +929,7 @@ WallpaperItem {
             var username = root.configuration.Username
             var password = root.configuration.Password
             
-            console.log("Downloading image from:", cleanUrl)
+            // Reduced logging verbosity - only log errors, not every download
             
             var xhr = new XMLHttpRequest()
             xhr.open("GET", cleanUrl, true, username, password)
@@ -984,9 +949,8 @@ WallpaperItem {
             
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === XMLHttpRequest.DONE) {
-                    console.log("XHR response status:", xhr.status)
                     if (xhr.status === 200) {
-                        console.log("Image downloaded, size:", xhr.response.byteLength, "bytes")
+                        // Removed verbose download logging to prevent log bloat
                         
                         // Read EXIF orientation before converting to base64
                         var orientation = 0
@@ -1003,20 +967,12 @@ WallpaperItem {
                         
                         // Read EXIF data for JPEG images
                         if (mimeType === "image/jpeg") {
-                            console.log("Reading EXIF data from JPEG image...")
                             orientation = readExifOrientation(xhr.response)
                             readExifTags(xhr.response)  // Read additional EXIF tags
-                            console.log("EXIF orientation result:", orientation, "degrees (0=normal, 90=rotate 90°, -90=rotate -90°, 180=rotate 180°)")
-                            if (currentExifData.hasData) {
-                                console.log("✅ EXIF data found:", JSON.stringify(currentExifData))
-                            }
+                            // Only log EXIF data if orientation correction is needed (non-zero)
                             if (orientation !== 0) {
-                                console.log("✅ EXIF orientation detected, rotation will be applied:", orientation, "degrees")
-                            } else {
-                                console.log("ℹ️  No EXIF orientation found or orientation is normal (0°)")
+                                console.log("EXIF orientation detected, applying rotation:", orientation, "degrees")
                             }
-                        } else {
-                            console.log("Not a JPEG image, skipping EXIF data (MIME type:", mimeType, ")")
                         }
                         
                         // Convert arraybuffer to base64 data URL
@@ -1025,8 +981,8 @@ WallpaperItem {
                         var base64 = arrayBufferToBase64(bytes)
                         
                         var dataUrl = "data:" + mimeType + ";base64," + base64
-                        console.log("Image converted to data URL, MIME type:", mimeType)
-                        console.log("Data URL size:", Math.round(dataUrl.length / 1024), "KB")
+                        // Removed verbose logging of data URL to prevent log bloat (syslog/journal growth)
+                        // Data URLs are very large (hundreds of KB to MB) and should not be logged
                         
                         // Cache data URL for future use (if not too large)
                         if (dataUrl && dataUrl.length > 0) {
@@ -1067,7 +1023,7 @@ WallpaperItem {
         
         // Create image component with data URL (extracted for reuse)
         function createImageComponent(dataUrl, imageUrl, skipAnimation, orientation) {
-            console.log("Creating image component for StackView (data URL length:", dataUrl.length, ")")
+            // Removed data URL length logging to prevent log bloat
             
             // Use StackView pattern (following KDE official implementation)
             // Clean up any existing pending image
@@ -1084,7 +1040,6 @@ WallpaperItem {
             if (root.configuration.TransitionEnabled && root.configuration.TransitionRandom) {
                 // Randomize transition type (0=Fade, 1=Slide, 2=Zoom)
                 imageStack.transitionType = Math.floor(Math.random() * 3)
-                console.log("Random transition type selected:", imageStack.transitionType, "(0=Fade, 1=Slide, 2=Zoom)")
             } else {
                 // Use fixed transition type from configuration
                 imageStack.transitionType = root.configuration.TransitionType || 0
@@ -1092,19 +1047,12 @@ WallpaperItem {
             
             // Create image component in background (following KDE pattern)
             var component = imageStack.imageComponent
-            console.log("Component status:", component ? component.status : "null")
             if (component && component.status === Component.Ready) {
-                console.log("Creating image component with data URL")
-                console.log("StackView dimensions:", imageStack.width, "x", imageStack.height)
-                console.log("Transition enabled:", root.configuration.TransitionEnabled)
-                console.log("Transition random:", root.configuration.TransitionRandom)
-                console.log("Transition type:", imageStack.transitionType, "(0=Fade, 1=Slide, 2=Zoom)")
                 // Create with explicit dimensions to avoid size issues
                 // Set initial position/scale based on transition type
                 var initialX = (imageStack.transitionType === 1) ? imageStack.width : 0
                 var initialScale = (imageStack.transitionType === 2) ? 0.8 : 1.0
                 var imageOrientation = orientation !== undefined ? orientation : 0
-                console.log("Creating ImageComponent with orientation:", imageOrientation, "degrees")
                 imageStack.pendingImage = component.createObject(imageStack, {
                     "source": dataUrl,
                     "fillMode": root.configuration.FillMode,
@@ -1120,20 +1068,10 @@ WallpaperItem {
                 })
                 
                 if (imageStack.pendingImage) {
-                    console.log("ImageComponent created with orientation property:", imageStack.pendingImage.orientation, "degrees")
-                }
-                
-                if (imageStack.pendingImage) {
-                    console.log("Image component created:")
-                    console.log("  - status:", imageStack.pendingImage.status, "Image.Ready =", Image.Ready)
-                    console.log("  - dimensions:", imageStack.pendingImage.width, "x", imageStack.pendingImage.height)
-                    console.log("  - visible:", imageStack.pendingImage.visible)
-                    console.log("  - opacity:", imageStack.pendingImage.opacity)
                     // Connect to statusChanged to replace when loaded
                     // Note: statusChanged signal is automatically available via property alias
                     if (imageStack.pendingImage.statusChanged) {
                         imageStack.pendingImage.statusChanged.connect(imageStack.replaceWhenLoaded)
-                        console.log("Connected to statusChanged signal")
                     } else {
                         console.warn("statusChanged signal not available!")
                     }
@@ -1143,15 +1081,14 @@ WallpaperItem {
                     console.error("Failed to create image component:", component ? component.errorString() : "component is null")
                     root.loading = false
                 }
-            } else {
-                console.error("Image component not ready. Status:", component ? component.status : "null", "Error:", component ? component.errorString() : "component is null")
-                // Fallback: try to create component on the fly
-                if (!component || component.status === Component.Error) {
-                    console.log("Attempting to reload ImageComponent")
-                    imageStack.imageComponent = Qt.createComponent("ImageComponent.qml", imageStack)
+                } else {
+                    console.error("Image component not ready. Status:", component ? component.status : "null", "Error:", component ? component.errorString() : "component is null")
+                    // Fallback: try to create component on the fly
+                    if (!component || component.status === Component.Error) {
+                        imageStack.imageComponent = Qt.createComponent("ImageComponent.qml", imageStack)
+                    }
+                    root.loading = false
                 }
-                root.loading = false
-            }
         }
     }
     
@@ -1182,16 +1119,12 @@ WallpaperItem {
             id: imageStack
             anchors.fill: parent
             
-            // AGGRESSIVE MONITORING: Monitor depth for safety (following Qt/KDE best practices)
+            // Monitor depth for safety (following Qt/KDE best practices)
             // With replace(), depth should never exceed 2-3 even during transitions
-            // Enhanced monitoring to catch memory leaks early
+            // Only log warnings for problematic depths to reduce log verbosity
             onDepthChanged: {
-                console.log("📊 StackView depth changed:", depth, "(expected: 1-2, max: 3)")
                 if (depth > 3) {
                     console.warn("⚠️  StackView depth exceeded expected limit:", depth, "- possible memory leak!")
-                    console.warn("⚠️  This may indicate that old images are not being properly destroyed")
-                } else if (depth > 2) {
-                    console.warn("⚠️  StackView depth is", depth, "- monitoring closely (should be ≤ 2)")
                 }
             }
             
@@ -1208,19 +1141,13 @@ WallpaperItem {
             property Component imageComponent: null
             
             Component.onCompleted: {
-                console.log("StackView Component.onCompleted: loading ImageComponent")
                 imageComponent = Qt.createComponent("ImageComponent.qml", imageStack)
                 if (imageComponent.status === Component.Error) {
                     console.error("Failed to load ImageComponent:", imageComponent.errorString())
-                } else if (imageComponent.status === Component.Ready) {
-                    console.log("ImageComponent loaded successfully")
-                } else {
-                    console.log("ImageComponent loading, status:", imageComponent.status)
+                } else if (imageComponent.status !== Component.Ready) {
                     // Wait for component to be ready
                     imageComponent.statusChanged.connect(function() {
-                        if (imageComponent.status === Component.Ready) {
-                            console.log("ImageComponent ready after async load")
-                        } else if (imageComponent.status === Component.Error) {
+                        if (imageComponent.status === Component.Error) {
                             console.error("ImageComponent failed to load:", imageComponent.errorString())
                         }
                     })
@@ -1304,19 +1231,13 @@ WallpaperItem {
             // Function to replace image when loaded (following KDE pattern)
             function replaceWhenLoaded() {
                 if (!pendingImage) {
-                    console.log("replaceWhenLoaded: no pendingImage")
                     return
                 }
-                
-                console.log("replaceWhenLoaded: checking status, current status:", pendingImage.status)
                 
                 // Wait for image to finish loading
                 if (pendingImage.status === Image.Loading) {
-                    console.log("replaceWhenLoaded: image still loading, waiting...")
                     return
                 }
-                
-                console.log("replaceWhenLoaded: image ready, replacing in StackView")
                 
                 // Disconnect statusChanged signal
                 pendingImage.statusChanged.disconnect(replaceWhenLoaded)
@@ -1328,29 +1249,21 @@ WallpaperItem {
                 var isDestroyed = false  // Flag to prevent double destruction
                 
                 imageToCleanup.QQC2.StackView.onDeactivated.connect(function() {
-                    console.log("Image deactivated, destroying")
                     if (imageToCleanup && !isDestroyed) {
                         isDestroyed = true
                         imageToCleanup.destroy()
-                    } else if (isDestroyed) {
-                        console.log("Image already destroyed, skipping onDeactivated")
                     }
                 })
                 imageToCleanup.QQC2.StackView.onRemoved.connect(function() {
-                    console.log("Image removed, destroying")
                     if (imageToCleanup && !isDestroyed) {
                         isDestroyed = true
                         imageToCleanup.destroy()
-                    } else if (isDestroyed) {
-                        console.log("Image already destroyed, skipping onRemoved")
                     }
                 })
                 
                 // Replace with transition
                 // Following KDE official pattern: replace() maintains only 1-2 items during transitions
                 // onDeactivated destroys immediately when item is deactivated (memory management)
-                console.log("Calling imageStack.replace() with pendingImage")
-                console.log("StackView depth before replace:", imageStack.depth)
                 
                 // Safety check: if depth is unexpectedly high, log warning
                 // With replace(), depth should be 1-2 (current + new during transition)
@@ -1358,74 +1271,33 @@ WallpaperItem {
                     console.warn("⚠️  StackView depth is unexpectedly high:", imageStack.depth, "- this may indicate a memory issue")
                 }
                 
-                var result = imageStack.replace(pendingImage, {}, QQC2.StackView.Transition)
-                console.log("replace() result:", result)
-                console.log("StackView currentItem:", imageStack.currentItem)
-                console.log("StackView depth after replace:", imageStack.depth)
+                imageStack.replace(pendingImage, {}, QQC2.StackView.Transition)
                 
                 root.loading = false
                 
                 // Handle errors
                 if (pendingImage.status !== Image.Ready) {
                     console.warn("Image failed to load, status:", pendingImage.status)
-                } else {
-                    console.log("Image successfully replaced in StackView")
-                    console.log("Current item source:", imageStack.currentItem ? imageStack.currentItem.source : "null")
                 }
                 
                 var tempPending = pendingImage
                 pendingImage = null
                 
-                // AGGRESSIVE CLEANUP: Force cleanup of old StackView items after transition
+                // Force cleanup of old StackView items after transition
                 // This ensures old images are properly destroyed and memory is released
                 Qt.callLater(function() {
-                    // Force cleanup: remove any items beyond currentItem
                     // StackView should only have 1-2 items (current + maybe one in transition)
                     var currentDepth = imageStack.depth
                     
-                    // Enhanced memory monitoring with detailed logging
-                    console.log("📊 Memory monitoring after replace:")
-                    console.log("  - StackView depth:", currentDepth, "(expected: 1-2)")
-                    console.log("  - Image switch count:", carouselController.imageSwitchCount)
-                    console.log("  - Cache size:", carouselController.cacheOrder ? carouselController.cacheOrder.length : 0, "/", carouselController.maxCacheSize)
-                    
+                    // Only log warnings for problematic depths to reduce log verbosity
                     if (currentDepth > 2) {
-                        console.warn("⚠️  StackView depth still high after cleanup:", currentDepth, "- forcing additional cleanup")
-                        console.warn("⚠️  This may indicate a memory leak - old images not being destroyed")
-                        // Try to clean up old items (StackView should handle this, but we force it)
-                        // Note: We can't directly access StackView items, but we log for monitoring
-                        console.log("🧹 Aggressive cleanup triggered: StackView depth", currentDepth, "should be ≤ 2")
+                        console.warn("⚠️  StackView depth still high after cleanup:", currentDepth, "- possible memory leak")
                     }
                 })
                 
-                // Verify the item is actually in the StackView
+                // Verify the item is actually in the StackView (only log errors)
                 Qt.callLater(function() {
-                    if (imageStack.currentItem) {
-                        console.log("StackView currentItem verified:")
-                        console.log("  - visible:", imageStack.currentItem.visible)
-                        console.log("  - opacity:", imageStack.currentItem.opacity)
-                        console.log("  - width:", imageStack.currentItem.width, "height:", imageStack.currentItem.height)
-                        console.log("  - source:", imageStack.currentItem.source)
-                        console.log("  - image status:", imageStack.currentItem.status)
-                        // Check if image inside is visible
-                        if (imageStack.currentItem.children && imageStack.currentItem.children.length > 0) {
-                            var imageChild = null
-                            for (var i = 0; i < imageStack.currentItem.children.length; i++) {
-                                if (imageStack.currentItem.children[i].source !== undefined) {
-                                    imageChild = imageStack.currentItem.children[i]
-                                    break
-                                }
-                            }
-                            if (imageChild) {
-                                console.log("  - Image child found:")
-                                console.log("    - visible:", imageChild.visible)
-                                console.log("    - opacity:", imageChild.opacity)
-                                console.log("    - width:", imageChild.width, "height:", imageChild.height)
-                                console.log("    - source:", imageChild.source)
-                                console.log("    - status:", imageChild.status)
-                            }
-                        }
-                    } else {
+                    if (!imageStack.currentItem) {
                         console.error("StackView currentItem is null after replace!")
                     }
                 })
@@ -1574,23 +1446,18 @@ WallpaperItem {
             carouselTimer.interval = root.configuration.SlideInterval * 1000
         }
         function onBlurChanged() {
-            console.log("Blur setting changed:", root.configuration.Blur)
             // Settings will be applied to next image via ImageComponent
         }
         function onBlurOpacityChanged() {
-            console.log("Blur opacity changed:", root.configuration.BlurOpacity, "%")
             // Settings will be applied to next image via ImageComponent
         }
         function onFillModeChanged() {
-            console.log("FillMode changed:", root.configuration.FillMode)
             // Settings will be applied to next image via ImageComponent
         }
         function onImageScaleChanged() {
-            console.log("Image scale changed:", root.configuration.ImageScale, "%")
             // Settings will be applied to next image via ImageComponent
         }
         function onShowExifInfoChanged() {
-            console.log("Show EXIF info changed:", root.configuration.ShowExifInfo)
             if (root.configuration.ShowExifInfo && carouselController.currentExifData.hasData) {
                 exifOsd.opacity = 1.0
                 if (root.configuration.ExifInfoDuration > 0) {
@@ -1601,29 +1468,24 @@ WallpaperItem {
             }
         }
         function onExifInfoDurationChanged() {
-            console.log("EXIF info duration changed:", root.configuration.ExifInfoDuration, "seconds")
             if (root.configuration.ExifInfoDuration > 0 && exifOsd.opacity > 0) {
                 exifHideTimer.interval = root.configuration.ExifInfoDuration * 1000
                 exifHideTimer.restart()
             }
         }
             function onTransitionEnabledChanged() {
-                console.log("Transition enabled changed:", root.configuration.TransitionEnabled)
                 imageStack.doesSkipAnimation = !root.configuration.TransitionEnabled
             }
             function onTransitionRandomChanged() {
-                console.log("Transition random changed:", root.configuration.TransitionRandom)
                 // Transition type will be determined on next image load
             }
             function onTransitionTypeChanged() {
-                console.log("Transition type changed:", root.configuration.TransitionType, "(0=Fade, 1=Slide, 2=Zoom)")
                 // Only update if random is disabled
                 if (!root.configuration.TransitionRandom) {
                     imageStack.transitionType = root.configuration.TransitionType || 0
                 }
             }
         function onTransitionDurationChanged() {
-            console.log("Transition duration changed:", root.configuration.TransitionDuration, "ms")
             imageStack.transitionDuration = root.configuration.TransitionDuration || 1000
         }
     }
