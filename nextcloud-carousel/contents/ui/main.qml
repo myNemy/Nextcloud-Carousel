@@ -555,6 +555,12 @@ WallpaperItem {
             var orientation = readExifOrientation(arrayBuffer)
             currentExifData.orientation = orientation
             
+            // If orientation was found (non-zero), we have EXIF data
+            // This ensures hasData is true even if only orientation is available
+            if (orientation !== 0) {
+                currentExifData.hasData = true
+            }
+            
             // Read additional EXIF tags
             readExifTags(arrayBuffer)
             
@@ -969,6 +975,14 @@ WallpaperItem {
                         if (mimeType === "image/jpeg") {
                             orientation = readExifOrientation(xhr.response)
                             readExifTags(xhr.response)  // Read additional EXIF tags
+                            
+                            // Ensure hasData is set if orientation was found
+                            // This is important because readExifTags might not set hasData
+                            // if it doesn't find the specific tags it's looking for
+                            if (orientation !== 0 && !currentExifData.hasData) {
+                                currentExifData.hasData = true
+                            }
+                            
                             // Only log EXIF data if orientation correction is needed (non-zero)
                             if (orientation !== 0) {
                                 console.log("EXIF orientation detected, applying rotation:", orientation, "degrees")
@@ -976,9 +990,10 @@ WallpaperItem {
                         }
                         
                         // Convert arraybuffer to base64 data URL
-                        // btoa() might not be available, use manual base64 encoding
-                        var bytes = new Uint8Array(xhr.response)
-                        var base64 = arrayBufferToBase64(bytes)
+                        // IMPORTANT: pass the ArrayBuffer directly.
+                        // Passing a Uint8Array here causes an additional full copy in arrayBufferToBase64()
+                        // (new Uint8Array(uint8Array) copies), which can spike memory and trigger OOM.
+                        var base64 = arrayBufferToBase64(xhr.response)
                         
                         var dataUrl = "data:" + mimeType + ";base64," + base64
                         // Removed verbose logging of data URL to prevent log bloat (syslog/journal growth)
@@ -1315,7 +1330,18 @@ WallpaperItem {
             }
             width: exifContent.implicitWidth + Kirigami.Units.gridUnit * 2
             height: exifContent.implicitHeight + Kirigami.Units.gridUnit * 2
-            visible: root.configuration.ShowExifInfo && carouselController.currentExifData.hasData && opacity > 0
+            // Show OSD when ShowExifInfo is enabled AND we have EXIF data AND opacity > 0
+            // Using explicit binding to ensure visibility updates correctly
+            visible: root.configuration.ShowExifInfo && 
+                    (carouselController.currentExifData.hasData || 
+                     carouselController.currentExifData.orientation !== 0 ||
+                     carouselController.currentExifData.dateTime !== "" ||
+                     carouselController.currentExifData.make !== "" ||
+                     carouselController.currentExifData.model !== "" ||
+                     carouselController.currentExifData.iso > 0 ||
+                     carouselController.currentExifData.fNumber > 0 ||
+                     carouselController.currentExifData.exposureTime !== "") && 
+                    opacity > 0
             opacity: 0
             color: Qt.rgba(0, 0, 0, 0.75)  // Semi-transparent black background
             radius: Kirigami.Units.smallSpacing
@@ -1458,10 +1484,30 @@ WallpaperItem {
             // Settings will be applied to next image via ImageComponent
         }
         function onShowExifInfoChanged() {
-            if (root.configuration.ShowExifInfo && carouselController.currentExifData.hasData) {
-                exifOsd.opacity = 1.0
-                if (root.configuration.ExifInfoDuration > 0) {
-                    exifHideTimer.restart()
+            // When ShowExifInfo is enabled, show OSD if we have any EXIF data
+            // This works even if the option is enabled after image is already loaded
+            if (root.configuration.ShowExifInfo) {
+                // Force update of hasData by checking if we have any EXIF data
+                // Check if orientation is non-zero or any other EXIF field is set
+                var hasAnyData = carouselController.currentExifData.orientation !== 0 ||
+                                 carouselController.currentExifData.dateTime !== "" ||
+                                 carouselController.currentExifData.make !== "" ||
+                                 carouselController.currentExifData.model !== "" ||
+                                 carouselController.currentExifData.iso > 0 ||
+                                 carouselController.currentExifData.fNumber > 0 ||
+                                 carouselController.currentExifData.exposureTime !== ""
+                
+                if (hasAnyData) {
+                    // Ensure hasData is set correctly
+                    if (!carouselController.currentExifData.hasData) {
+                        carouselController.currentExifData.hasData = true
+                    }
+                    exifOsd.opacity = 1.0
+                    if (root.configuration.ExifInfoDuration > 0) {
+                        exifHideTimer.restart()
+                    }
+                } else {
+                    exifOsd.opacity = 0
                 }
             } else {
                 exifOsd.opacity = 0

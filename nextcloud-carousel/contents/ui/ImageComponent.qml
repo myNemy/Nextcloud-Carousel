@@ -78,7 +78,10 @@ Item {
             }
         }
         asynchronous: true
-        cache: true
+        // CRITICAL: data: URLs + Image cache cause unbounded memory growth.
+        // With a slideshow of thousands of images, Qt's image cache can retain many decoded frames.
+        // Disable it to avoid plasmashell being OOM-killed over time.
+        cache: false
         smooth: true
         
         // Blur effect (simplified - using opacity)
