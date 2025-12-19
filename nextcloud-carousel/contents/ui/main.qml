@@ -33,6 +33,9 @@ WallpaperItem {
         property var dataUrlCache: ({})  // LRU cache: { imageUrl: dataUrl }
         property var cacheOrder: []  // Track cache order for LRU eviction (first = least recently used)
         property bool cacheLocked: false  // Prevent race conditions during cache operations
+        property int retryCount: 0  // Track retry attempts for PROPFIND
+        property int retryDelay: 30  // Current retry delay in seconds (starts at 30s)
+        property int maxRetries: 10  // Maximum retry attempts before giving up
         
         // Calculate optimal cache size based on total number of photos in the list
         // Strategy: DISABLED to prevent memory leaks (OOM Killer issue)
@@ -57,7 +60,30 @@ WallpaperItem {
                 root.loading = false
                 return
             }
+            // Reset retry state on new initialization
+            retryCount = 0
+            retryDelay = 30
             loadPhotos()
+        }
+        
+        // Retry PROPFIND with exponential backoff
+        function retryLoadPhotos() {
+            if (retryCount >= maxRetries) {
+                console.error("❌ Maximum retry attempts reached (" + maxRetries + "). Giving up.")
+                console.error("Please check your network connection and Nextcloud server status.")
+                root.loading = false
+                return
+            }
+            
+            retryCount++
+            console.log("🔄 Retrying to load photos (attempt " + retryCount + "/" + maxRetries + ") in " + retryDelay + " seconds...")
+            
+            // Schedule retry with exponential backoff (30s, 60s, 120s, max 5min)
+            retryTimer.interval = retryDelay * 1000
+            retryTimer.start()
+            
+            // Increase delay for next retry (exponential backoff, capped at 5 minutes)
+            retryDelay = Math.min(retryDelay * 2, 300)
         }
         
         function loadPhotos() {
@@ -97,6 +123,8 @@ WallpaperItem {
                 console.error("⏱️  PROPFIND request timed out after 30 seconds")
                 console.error("This may indicate network issues or a very large folder structure")
                 root.loading = false
+                // Retry with exponential backoff
+                retryLoadPhotos()
             }
             
             xhr.onreadystatechange = function() {
@@ -166,6 +194,10 @@ WallpaperItem {
                         photoList = images
                         
                         if (photoList.length > 0) {
+                            // Reset retry state on successful load
+                            retryCount = 0
+                            retryDelay = 30
+                            
                             // Reset switch counter and clear cache when reloading photo list
                             imageSwitchCount = 0
                             clearDataUrlCache()
@@ -212,11 +244,22 @@ WallpaperItem {
                         } else if (xhr.status === 404) {
                             console.error("Path not found - check Photo Path setting")
                         } else if (xhr.status === 0) {
-                            console.error("Network error or CORS issue")
+                            console.error("Network error or CORS issue - connection may be down")
+                            // Retry with exponential backoff for network errors
+                            retryLoadPhotos()
+                            return  // Don't set loading = false here, retry will handle it
                         }
+                        // For other errors (401, 404), don't retry (configuration issues)
                         root.loading = false
                     }
                 }
+            }
+            
+            xhr.onerror = function() {
+                console.error("Network error during PROPFIND request - connection may be down")
+                root.loading = false
+                // Retry with exponential backoff
+                retryLoadPhotos()
             }
             
             xhr.send(propfindBody)
@@ -534,13 +577,15 @@ WallpaperItem {
             iso: 0,
             fNumber: 0,
             exposureTime: "",
+            fileName: "",  // Current image filename
             hasData: false
         })
         
         // Optimized: Only searches first 64KB where EXIF data is always located (prevents UI blocking on large images)
         // Extended to read multiple EXIF tags
         function readExifData(arrayBuffer) {
-            // Reset EXIF data
+            // Reset EXIF data (preserve fileName as it's set from URL)
+            var savedFileName = currentExifData.fileName || ""
             currentExifData = {
                 orientation: 0,
                 dateTime: "",
@@ -549,6 +594,7 @@ WallpaperItem {
                 iso: 0,
                 fNumber: 0,
                 exposureTime: "",
+                fileName: savedFileName,  // Preserve filename
                 hasData: false
             }
             
@@ -568,12 +614,12 @@ WallpaperItem {
         }
         
         // Legacy function for backward compatibility
+        // Now supports JPEG, TIFF, and WebP (which can contain EXIF)
         function readExifOrientation(arrayBuffer) {
             try {
                 var bytes = new Uint8Array(arrayBuffer)
-                // Check if it's a JPEG (starts with 0xFFD8)
-                if (bytes.length < 2 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) {
-                    return 0  // Not a JPEG, assume normal orientation
+                if (bytes.length < 8) {
+                    return 0  // Too small to contain EXIF
                 }
                 
                 // Optimize: EXIF data is always in the first segments (typically < 64KB)
@@ -581,129 +627,156 @@ WallpaperItem {
                 // This follows QML best practices for heavy operations
                 var maxSearchBytes = Math.min(bytes.length, 65536)  // 64KB limit
                 
-                // Search for APP1 marker (0xFFE1) which contains EXIF data
-                var i = 2  // Start after SOI marker
-                var app1Found = false
-                while (i < maxSearchBytes - 1) {
-                    // Check for APP1 marker
-                    if (bytes[i] === 0xFF && bytes[i + 1] === 0xE1) {
-                        app1Found = true
-                        // Found APP1 segment
-                        var segmentLength = (bytes[i + 2] << 8) | bytes[i + 3]
-                        var segmentStart = i + 4
-                        
-                        // Check if it's an EXIF segment (starts with "Exif\0\0")
-                        if (segmentStart + 6 <= bytes.length) {
-                            var exifHeader = String.fromCharCode(
-                                bytes[segmentStart],
-                                bytes[segmentStart + 1],
-                                bytes[segmentStart + 2],
-                                bytes[segmentStart + 3],
-                                bytes[segmentStart + 4],
-                                bytes[segmentStart + 5]
-                            )
+                var tiffOffset = -1
+                var isIntel = false
+                
+                // Check if it's a JPEG (starts with 0xFFD8)
+                if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
+                    // JPEG: Search for APP1 marker (0xFFE1) which contains EXIF data
+                    var i = 2  // Start after SOI marker
+                    while (i < maxSearchBytes - 1) {
+                        // Check for APP1 marker
+                        if (bytes[i] === 0xFF && bytes[i + 1] === 0xE1) {
+                            // Found APP1 segment
+                            var segmentLength = (bytes[i + 2] << 8) | bytes[i + 3]
+                            var segmentStart = i + 4
                             
-                            if (exifHeader === "Exif\0\0") {
-                                // Found EXIF segment, now find Orientation tag (0x0112)
-                                // EXIF structure: TIFF header (8 bytes) + IFD0
-                                var tiffOffset = segmentStart + 6
+                            // Check if it's an EXIF segment (starts with "Exif\0\0")
+                            if (segmentStart + 6 <= bytes.length) {
+                                var exifHeader = String.fromCharCode(
+                                    bytes[segmentStart],
+                                    bytes[segmentStart + 1],
+                                    bytes[segmentStart + 2],
+                                    bytes[segmentStart + 3],
+                                    bytes[segmentStart + 4],
+                                    bytes[segmentStart + 5]
+                                )
                                 
-                                if (tiffOffset + 8 > bytes.length) break
-                                
-                                // Check byte order (0x4949 = Intel, 0x4D4D = Motorola)
-                                var isIntel = (bytes[tiffOffset] === 0x49 && bytes[tiffOffset + 1] === 0x49)
-                                
-                                // Read IFD0 offset (offset 4 from TIFF start, 4 bytes)
-                                var ifd0OffsetAddr = tiffOffset + 4
-                                if (ifd0OffsetAddr + 4 > bytes.length) break
-                                
-                                var ifd0Offset
-                                if (isIntel) {
-                                    ifd0Offset = bytes[ifd0OffsetAddr] | (bytes[ifd0OffsetAddr + 1] << 8) | 
-                                                 (bytes[ifd0OffsetAddr + 2] << 16) | (bytes[ifd0OffsetAddr + 3] << 24)
-                                } else {
-                                    ifd0Offset = (bytes[ifd0OffsetAddr] << 24) | (bytes[ifd0OffsetAddr + 1] << 16) | 
-                                                 (bytes[ifd0OffsetAddr + 2] << 8) | bytes[ifd0OffsetAddr + 3]
+                                if (exifHeader === "Exif\0\0") {
+                                    // Found EXIF segment in JPEG
+                                    tiffOffset = segmentStart + 6
+                                    break
                                 }
+                            }
+                            
+                            // Move to next segment
+                            i += 2 + segmentLength
+                        } else if (bytes[i] === 0xFF && (bytes[i + 1] & 0xF0) === 0xE0) {
+                            // Other APP segment, skip it
+                            var segLen = (bytes[i + 2] << 8) | bytes[i + 3]
+                            i += 2 + segLen
+                        } else if (bytes[i] === 0xFF && bytes[i + 1] === 0xDA) {
+                            // Start of scan (SOS), no more segments
+                            break
+                        } else {
+                            i++
+                        }
+                    }
+                } else if ((bytes[0] === 0x49 && bytes[1] === 0x49) || (bytes[0] === 0x4D && bytes[1] === 0x4D)) {
+                    // TIFF file (Intel: 0x4949, Motorola: 0x4D4D)
+                    // TIFF can contain EXIF directly (EXIF is based on TIFF)
+                    tiffOffset = 0
+                } else {
+                    // Try to find "Exif\0\0" header (for WebP and other formats)
+                    // WebP can contain EXIF in a similar format
+                    for (var j = 0; j < maxSearchBytes - 6; j++) {
+                        if (bytes[j] === 0x45 && bytes[j + 1] === 0x78 && bytes[j + 2] === 0x69 && 
+                            bytes[j + 3] === 0x66 && bytes[j + 4] === 0x00 && bytes[j + 5] === 0x00) {
+                            // Found "Exif\0\0" header
+                            tiffOffset = j + 6
+                            break
+                        }
+                    }
+                }
+                
+                // If we found EXIF/TIFF data, parse it
+                if (tiffOffset >= 0 && tiffOffset + 8 <= bytes.length) {
+                    // Found EXIF segment, now find Orientation tag (0x0112)
+                    // EXIF structure: TIFF header (8 bytes) + IFD0
                                 
-                                // IFD0 address is relative to TIFF start
-                                var ifd0Addr = tiffOffset + ifd0Offset
-                                
-                                // Read number of IFD entries
-                                if (ifd0Addr + 2 > bytes.length) break
-                                
-                                var numEntries
-                                if (isIntel) {
-                                    numEntries = bytes[ifd0Addr] | (bytes[ifd0Addr + 1] << 8)
-                                } else {
-                                    numEntries = (bytes[ifd0Addr] << 8) | bytes[ifd0Addr + 1]
-                                }
-                                
-                                // Search for Orientation tag (0x0112) in IFD0
-                                var entryOffset = ifd0Addr + 2
-                                for (var e = 0; e < numEntries && entryOffset + 12 <= bytes.length; e++) {
-                                    var tag
-                                    if (isIntel) {
-                                        tag = bytes[entryOffset] | (bytes[entryOffset + 1] << 8)
-                                    } else {
-                                        tag = (bytes[entryOffset] << 8) | bytes[entryOffset + 1]
-                                    }
-                                    
-                                    // Orientation tag is 0x0112 (274)
-                                    if (tag === 0x0112) {
-                                        // Read orientation value (offset 8 from entry start)
-                                        var valueOffset = entryOffset + 8
-                                        var orientation
-                                        if (isIntel) {
-                                            orientation = bytes[valueOffset] | (bytes[valueOffset + 1] << 8)
-                                        } else {
-                                            orientation = (bytes[valueOffset] << 8) | bytes[valueOffset + 1]
-                                        }
-                                        
-                                        // Convert EXIF orientation to rotation angle
-                                        // EXIF orientation values:
-                                        // 1 = Normal (0°)
-                                        // 3 = Rotated 180° (needs 180° correction)
-                                        // 6 = Rotated 90° clockwise (needs +90° counter-clockwise correction)
-                                        // 8 = Rotated 90° counter-clockwise (needs -90° clockwise correction)
-                                        // Note: In QML, positive rotation is counter-clockwise, negative is clockwise
-                                        var rotationAngle
-                                        switch (orientation) {
-                                        case 1: 
-                                            rotationAngle = 0
-                                            return rotationAngle
-                                        case 3: 
-                                            rotationAngle = 180
-                                            return rotationAngle
-                                        case 6: 
-                                            // Image was rotated 90° clockwise, need to rotate 90° counter-clockwise to correct
-                                            rotationAngle = 90
-                                            return rotationAngle
-                                        case 8: 
-                                            // Image was rotated 90° counter-clockwise, need to rotate 90° clockwise to correct
-                                            rotationAngle = -90
-                                            return rotationAngle
-                                        default: 
-                                            return 0    // Unknown, assume normal
-                                        }
-                                    }
-                                    
-                                    entryOffset += 12  // Each IFD entry is 12 bytes
-                                }
+                    // Check byte order (0x4949 = Intel, 0x4D4D = Motorola)
+                    isIntel = (bytes[tiffOffset] === 0x49 && bytes[tiffOffset + 1] === 0x49)
+                    
+                    // Read IFD0 offset (offset 4 from TIFF start, 4 bytes)
+                    var ifd0OffsetAddr = tiffOffset + 4
+                    if (ifd0OffsetAddr + 4 > bytes.length) {
+                        return 0
+                    }
+                    
+                    var ifd0Offset
+                    if (isIntel) {
+                        ifd0Offset = bytes[ifd0OffsetAddr] | (bytes[ifd0OffsetAddr + 1] << 8) | 
+                                     (bytes[ifd0OffsetAddr + 2] << 16) | (bytes[ifd0OffsetAddr + 3] << 24)
+                    } else {
+                        ifd0Offset = (bytes[ifd0OffsetAddr] << 24) | (bytes[ifd0OffsetAddr + 1] << 16) | 
+                                     (bytes[ifd0OffsetAddr + 2] << 8) | bytes[ifd0OffsetAddr + 3]
+                    }
+                    
+                    // IFD0 address is relative to TIFF start
+                    var ifd0Addr = tiffOffset + ifd0Offset
+                    
+                    // Read number of IFD entries
+                    if (ifd0Addr + 2 > bytes.length) {
+                        return 0
+                    }
+                    
+                    var numEntries
+                    if (isIntel) {
+                        numEntries = bytes[ifd0Addr] | (bytes[ifd0Addr + 1] << 8)
+                    } else {
+                        numEntries = (bytes[ifd0Addr] << 8) | bytes[ifd0Addr + 1]
+                    }
+                    
+                    // Search for Orientation tag (0x0112) in IFD0
+                    var entryOffset = ifd0Addr + 2
+                    for (var e = 0; e < numEntries && entryOffset + 12 <= bytes.length; e++) {
+                        var tag
+                        if (isIntel) {
+                            tag = bytes[entryOffset] | (bytes[entryOffset + 1] << 8)
+                        } else {
+                            tag = (bytes[entryOffset] << 8) | bytes[entryOffset + 1]
+                        }
+                        
+                        // Orientation tag is 0x0112 (274)
+                        if (tag === 0x0112) {
+                            // Read orientation value (offset 8 from entry start)
+                            var valueOffset = entryOffset + 8
+                            var orientation
+                            if (isIntel) {
+                                orientation = bytes[valueOffset] | (bytes[valueOffset + 1] << 8)
+                            } else {
+                                orientation = (bytes[valueOffset] << 8) | bytes[valueOffset + 1]
+                            }
+                            
+                            // Convert EXIF orientation to rotation angle
+                            // EXIF orientation values:
+                            // 1 = Normal (0°)
+                            // 3 = Rotated 180° (needs 180° correction)
+                            // 6 = Rotated 90° clockwise (needs +90° counter-clockwise correction)
+                            // 8 = Rotated 90° counter-clockwise (needs -90° clockwise correction)
+                            // Note: In QML, positive rotation is counter-clockwise, negative is clockwise
+                            var rotationAngle
+                            switch (orientation) {
+                            case 1: 
+                                rotationAngle = 0
+                                return rotationAngle
+                            case 3: 
+                                rotationAngle = 180
+                                return rotationAngle
+                            case 6: 
+                                // Image was rotated 90° clockwise, need to rotate 90° counter-clockwise to correct
+                                rotationAngle = 90
+                                return rotationAngle
+                            case 8: 
+                                // Image was rotated 90° counter-clockwise, need to rotate 90° clockwise to correct
+                                rotationAngle = -90
+                                return rotationAngle
+                            default: 
+                                return 0    // Unknown, assume normal
                             }
                         }
                         
-                        // Move to next segment
-                        i += 2 + segmentLength
-                    } else if (bytes[i] === 0xFF && (bytes[i + 1] & 0xF0) === 0xE0) {
-                        // Other APP segment, skip it
-                        var segLen = (bytes[i + 2] << 8) | bytes[i + 3]
-                        i += 2 + segLen
-                    } else if (bytes[i] === 0xFF && bytes[i + 1] === 0xDA) {
-                        // Start of scan (SOS), no more segments
-                        break
-                    } else {
-                        i++
+                        entryOffset += 12  // Each IFD entry is 12 bytes
                     }
                 }
                 
@@ -717,174 +790,192 @@ WallpaperItem {
         
         // Read additional EXIF tags (DateTime, Make, Model, ISO, FNumber, ExposureTime)
         // Following same pattern as readExifOrientation but reading multiple tags
+        // Now supports JPEG, TIFF, and WebP
         function readExifTags(arrayBuffer) {
             try {
                 var bytes = new Uint8Array(arrayBuffer)
-                
-                // Check if it's a JPEG
-                if (bytes.length < 2 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) {
-                    return  // Not a JPEG
+                if (bytes.length < 8) {
+                    return  // Too small to contain EXIF
                 }
                 
-                var maxSearchBytes = Math.min(bytes.length, 65536)  // 64KB limit
-                var i = 2
+                var tiffOffset = -1
+                var isIntel = false
                 
-                while (i < maxSearchBytes - 1) {
-                    if (bytes[i] === 0xFF && bytes[i + 1] === 0xE1) {
-                        var segmentLength = (bytes[i + 2] << 8) | bytes[i + 3]
-                        var segmentStart = i + 4
-                        
-                        if (segmentStart + 6 <= bytes.length) {
-                            var exifHeader = String.fromCharCode(
-                                bytes[segmentStart], bytes[segmentStart + 1],
-                                bytes[segmentStart + 2], bytes[segmentStart + 3],
-                                bytes[segmentStart + 4], bytes[segmentStart + 5]
-                            )
+                var maxSearchBytes = Math.min(bytes.length, 65536)  // 64KB limit
+                
+                // Check if it's a JPEG (starts with 0xFFD8)
+                if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
+                    // JPEG: Search for APP1 marker
+                    var i = 2
+                    while (i < maxSearchBytes - 1) {
+                        if (bytes[i] === 0xFF && bytes[i + 1] === 0xE1) {
+                            var segmentLength = (bytes[i + 2] << 8) | bytes[i + 3]
+                            var segmentStart = i + 4
                             
-                            if (exifHeader === "Exif\0\0") {
-                                var tiffOffset = segmentStart + 6
-                                if (tiffOffset + 8 > bytes.length) break
+                            if (segmentStart + 6 <= bytes.length) {
+                                var exifHeader = String.fromCharCode(
+                                    bytes[segmentStart], bytes[segmentStart + 1],
+                                    bytes[segmentStart + 2], bytes[segmentStart + 3],
+                                    bytes[segmentStart + 4], bytes[segmentStart + 5]
+                                )
                                 
-                                var isIntel = (bytes[tiffOffset] === 0x49 && bytes[tiffOffset + 1] === 0x49)
-                                
-                                // Read IFD0 offset
-                                var ifd0OffsetAddr = tiffOffset + 4
-                                if (ifd0OffsetAddr + 4 > bytes.length) break
-                                
-                                var ifd0Offset
+                                if (exifHeader === "Exif\0\0") {
+                                    tiffOffset = segmentStart + 6
+                                    break
+                                }
+                            }
+                            i += 2 + segmentLength
+                        } else if (bytes[i] === 0xFF && (bytes[i + 1] & 0xF0) === 0xE0) {
+                            var segLen = (bytes[i + 2] << 8) | bytes[i + 3]
+                            i += 2 + segLen
+                        } else if (bytes[i] === 0xFF && bytes[i + 1] === 0xDA) {
+                            break
+                        } else {
+                            i++
+                        }
+                    }
+                } else if ((bytes[0] === 0x49 && bytes[1] === 0x49) || (bytes[0] === 0x4D && bytes[1] === 0x4D)) {
+                    // TIFF file (Intel: 0x4949, Motorola: 0x4D4D)
+                    tiffOffset = 0
+                } else {
+                    // Try to find "Exif\0\0" header (for WebP and other formats)
+                    for (var j = 0; j < maxSearchBytes - 6; j++) {
+                        if (bytes[j] === 0x45 && bytes[j + 1] === 0x78 && bytes[j + 2] === 0x69 && 
+                            bytes[j + 3] === 0x66 && bytes[j + 4] === 0x00 && bytes[j + 5] === 0x00) {
+                            tiffOffset = j + 6
+                            break
+                        }
+                    }
+                }
+                
+                // If we found EXIF/TIFF data, parse it
+                if (tiffOffset >= 0 && tiffOffset + 8 <= bytes.length) {
+                    isIntel = (bytes[tiffOffset] === 0x49 && bytes[tiffOffset + 1] === 0x49)
+                    
+                    // Read IFD0 offset
+                    var ifd0OffsetAddr = tiffOffset + 4
+                    if (ifd0OffsetAddr + 4 > bytes.length) return
+                    
+                    var ifd0Offset
+                    if (isIntel) {
+                        ifd0Offset = bytes[ifd0OffsetAddr] | (bytes[ifd0OffsetAddr + 1] << 8) | 
+                                     (bytes[ifd0OffsetAddr + 2] << 16) | (bytes[ifd0OffsetAddr + 3] << 24)
+                    } else {
+                        ifd0Offset = (bytes[ifd0OffsetAddr] << 24) | (bytes[ifd0OffsetAddr + 1] << 16) | 
+                                     (bytes[ifd0OffsetAddr + 2] << 8) | bytes[ifd0OffsetAddr + 3]
+                    }
+                    
+                    var ifd0Addr = tiffOffset + ifd0Offset
+                    if (ifd0Addr + 2 > bytes.length) return
+                    
+                    var numEntries
+                    if (isIntel) {
+                        numEntries = bytes[ifd0Addr] | (bytes[ifd0Addr + 1] << 8)
+                    } else {
+                        numEntries = (bytes[ifd0Addr] << 8) | bytes[ifd0Addr + 1]
+                    }
+                    
+                    // Read tags from IFD0
+                    var entryOffset = ifd0Addr + 2
+                    for (var e = 0; e < numEntries && entryOffset + 12 <= bytes.length; e++) {
+                        var tag
+                        if (isIntel) {
+                            tag = bytes[entryOffset] | (bytes[entryOffset + 1] << 8)
+                        } else {
+                            tag = (bytes[entryOffset] << 8) | bytes[entryOffset + 1]
+                        }
+                        
+                        var type
+                        if (isIntel) {
+                            type = bytes[entryOffset + 2] | (bytes[entryOffset + 3] << 8)
+                        } else {
+                            type = (bytes[entryOffset + 2] << 8) | bytes[entryOffset + 3]
+                        }
+                        
+                        var count
+                        if (isIntel) {
+                            count = bytes[entryOffset + 4] | (bytes[entryOffset + 5] << 8) | 
+                                    (bytes[entryOffset + 6] << 16) | (bytes[entryOffset + 7] << 24)
+                        } else {
+                            count = (bytes[entryOffset + 4] << 24) | (bytes[entryOffset + 5] << 16) | 
+                                    (bytes[entryOffset + 6] << 8) | bytes[entryOffset + 7]
+                        }
+                        
+                        // Read tag value based on type
+                        var valueOffset = entryOffset + 8
+                        var valueAddr = tiffOffset
+                        
+                        // If value fits in 4 bytes, it's stored directly, otherwise it's an offset
+                        if (type === 2 && count <= 4) {  // ASCII string
+                            var value = ""
+                            for (var c = 0; c < count - 1 && valueOffset + c < bytes.length; c++) {
+                                value += String.fromCharCode(bytes[valueOffset + c])
+                            }
+                            
+                            if (tag === 0x0132) {  // DateTime
+                                currentExifData.dateTime = value
+                                currentExifData.hasData = true
+                            } else if (tag === 0x010F) {  // Make
+                                currentExifData.make = value
+                                currentExifData.hasData = true
+                            } else if (tag === 0x0110) {  // Model
+                                currentExifData.model = value
+                                currentExifData.hasData = true
+                            }
+                        } else if (type === 3 && count === 1) {  // Short (2 bytes)
+                            var shortValue
+                            if (isIntel) {
+                                shortValue = bytes[valueOffset] | (bytes[valueOffset + 1] << 8)
+                            } else {
+                                shortValue = (bytes[valueOffset] << 8) | bytes[valueOffset + 1]
+                            }
+                            
+                            if (tag === 0x8827) {  // ISO
+                                currentExifData.iso = shortValue
+                                currentExifData.hasData = true
+                            }
+                        } else if (type === 5 && count === 1) {  // Rational (2 longs)
+                            // Read offset to rational value
+                            var rationalOffset
+                            if (isIntel) {
+                                rationalOffset = bytes[valueOffset] | (bytes[valueOffset + 1] << 8) | 
+                                               (bytes[valueOffset + 2] << 16) | (bytes[valueOffset + 3] << 24)
+                            } else {
+                                rationalOffset = (bytes[valueOffset] << 24) | (bytes[valueOffset + 1] << 16) | 
+                                               (bytes[valueOffset + 2] << 8) | bytes[valueOffset + 3]
+                            }
+                            
+                            var rationalAddr = tiffOffset + rationalOffset
+                            if (rationalAddr + 8 <= bytes.length) {
+                                var numerator, denominator
                                 if (isIntel) {
-                                    ifd0Offset = bytes[ifd0OffsetAddr] | (bytes[ifd0OffsetAddr + 1] << 8) | 
-                                                 (bytes[ifd0OffsetAddr + 2] << 16) | (bytes[ifd0OffsetAddr + 3] << 24)
+                                    numerator = bytes[rationalAddr] | (bytes[rationalAddr + 1] << 8) | 
+                                              (bytes[rationalAddr + 2] << 16) | (bytes[rationalAddr + 3] << 24)
+                                    denominator = bytes[rationalAddr + 4] | (bytes[rationalAddr + 5] << 8) | 
+                                                (bytes[rationalAddr + 6] << 16) | (bytes[rationalAddr + 7] << 24)
                                 } else {
-                                    ifd0Offset = (bytes[ifd0OffsetAddr] << 24) | (bytes[ifd0OffsetAddr + 1] << 16) | 
-                                                 (bytes[ifd0OffsetAddr + 2] << 8) | bytes[ifd0OffsetAddr + 3]
+                                    numerator = (bytes[rationalAddr] << 24) | (bytes[rationalAddr + 1] << 16) | 
+                                              (bytes[rationalAddr + 2] << 8) | bytes[rationalAddr + 3]
+                                    denominator = (bytes[rationalAddr + 4] << 24) | (bytes[rationalAddr + 5] << 16) | 
+                                                (bytes[rationalAddr + 6] << 8) | bytes[rationalAddr + 7]
                                 }
                                 
-                                var ifd0Addr = tiffOffset + ifd0Offset
-                                if (ifd0Addr + 2 > bytes.length) break
-                                
-                                var numEntries
-                                if (isIntel) {
-                                    numEntries = bytes[ifd0Addr] | (bytes[ifd0Addr + 1] << 8)
-                                } else {
-                                    numEntries = (bytes[ifd0Addr] << 8) | bytes[ifd0Addr + 1]
+                                if (tag === 0x829D && denominator > 0) {  // FNumber
+                                    currentExifData.fNumber = numerator / denominator
+                                    currentExifData.hasData = true
+                                } else if (tag === 0x829A && denominator > 0) {  // ExposureTime
+                                    var expTime = numerator / denominator
+                                    if (expTime < 1) {
+                                        currentExifData.exposureTime = "1/" + Math.round(1 / expTime) + "s"
+                                    } else {
+                                        currentExifData.exposureTime = expTime.toFixed(1) + "s"
+                                    }
+                                    currentExifData.hasData = true
                                 }
-                                
-                                // Read tags from IFD0
-                                var entryOffset = ifd0Addr + 2
-                                for (var e = 0; e < numEntries && entryOffset + 12 <= bytes.length; e++) {
-                                    var tag
-                                    if (isIntel) {
-                                        tag = bytes[entryOffset] | (bytes[entryOffset + 1] << 8)
-                                    } else {
-                                        tag = (bytes[entryOffset] << 8) | bytes[entryOffset + 1]
-                                    }
-                                    
-                                    var type
-                                    if (isIntel) {
-                                        type = bytes[entryOffset + 2] | (bytes[entryOffset + 3] << 8)
-                                    } else {
-                                        type = (bytes[entryOffset + 2] << 8) | bytes[entryOffset + 3]
-                                    }
-                                    
-                                    var count
-                                    if (isIntel) {
-                                        count = bytes[entryOffset + 4] | (bytes[entryOffset + 5] << 8) | 
-                                                (bytes[entryOffset + 6] << 16) | (bytes[entryOffset + 7] << 24)
-                                    } else {
-                                        count = (bytes[entryOffset + 4] << 24) | (bytes[entryOffset + 5] << 16) | 
-                                                (bytes[entryOffset + 6] << 8) | bytes[entryOffset + 7]
-                                    }
-                                    
-                                    // Read tag value based on type
-                                    var valueOffset = entryOffset + 8
-                                    var valueAddr = tiffOffset
-                                    
-                                    // If value fits in 4 bytes, it's stored directly, otherwise it's an offset
-                                    if (type === 2 && count <= 4) {  // ASCII string
-                                        var value = ""
-                                        for (var c = 0; c < count - 1 && valueOffset + c < bytes.length; c++) {
-                                            value += String.fromCharCode(bytes[valueOffset + c])
-                                        }
-                                        
-                                        if (tag === 0x0132) {  // DateTime
-                                            currentExifData.dateTime = value
-                                            currentExifData.hasData = true
-                                        } else if (tag === 0x010F) {  // Make
-                                            currentExifData.make = value
-                                            currentExifData.hasData = true
-                                        } else if (tag === 0x0110) {  // Model
-                                            currentExifData.model = value
-                                            currentExifData.hasData = true
-                                        }
-                                    } else if (type === 3 && count === 1) {  // Short (2 bytes)
-                                        var shortValue
-                                        if (isIntel) {
-                                            shortValue = bytes[valueOffset] | (bytes[valueOffset + 1] << 8)
-                                        } else {
-                                            shortValue = (bytes[valueOffset] << 8) | bytes[valueOffset + 1]
-                                        }
-                                        
-                                        if (tag === 0x8827) {  // ISO
-                                            currentExifData.iso = shortValue
-                                            currentExifData.hasData = true
-                                        }
-                                    } else if (type === 5 && count === 1) {  // Rational (2 longs)
-                                        // Read offset to rational value
-                                        var rationalOffset
-                                        if (isIntel) {
-                                            rationalOffset = bytes[valueOffset] | (bytes[valueOffset + 1] << 8) | 
-                                                           (bytes[valueOffset + 2] << 16) | (bytes[valueOffset + 3] << 24)
-                                        } else {
-                                            rationalOffset = (bytes[valueOffset] << 24) | (bytes[valueOffset + 1] << 16) | 
-                                                           (bytes[valueOffset + 2] << 8) | bytes[valueOffset + 3]
-                                        }
-                                        
-                                        var rationalAddr = tiffOffset + rationalOffset
-                                        if (rationalAddr + 8 <= bytes.length) {
-                                            var numerator, denominator
-                                            if (isIntel) {
-                                                numerator = bytes[rationalAddr] | (bytes[rationalAddr + 1] << 8) | 
-                                                          (bytes[rationalAddr + 2] << 16) | (bytes[rationalAddr + 3] << 24)
-                                                denominator = bytes[rationalAddr + 4] | (bytes[rationalAddr + 5] << 8) | 
-                                                            (bytes[rationalAddr + 6] << 16) | (bytes[rationalAddr + 7] << 24)
-                                            } else {
-                                                numerator = (bytes[rationalAddr] << 24) | (bytes[rationalAddr + 1] << 16) | 
-                                                          (bytes[rationalAddr + 2] << 8) | bytes[rationalAddr + 3]
-                                                denominator = (bytes[rationalAddr + 4] << 24) | (bytes[rationalAddr + 5] << 16) | 
-                                                            (bytes[rationalAddr + 6] << 8) | bytes[rationalAddr + 7]
-                                            }
-                                            
-                                            if (tag === 0x829D && denominator > 0) {  // FNumber
-                                                currentExifData.fNumber = numerator / denominator
-                                                currentExifData.hasData = true
-                                            } else if (tag === 0x829A && denominator > 0) {  // ExposureTime
-                                                var expTime = numerator / denominator
-                                                if (expTime < 1) {
-                                                    currentExifData.exposureTime = "1/" + Math.round(1 / expTime) + "s"
-                                                } else {
-                                                    currentExifData.exposureTime = expTime.toFixed(1) + "s"
-                                                }
-                                                currentExifData.hasData = true
-                                            }
-                                        }
-                                    }
-                                    
-                                    entryOffset += 12
-                                }
-                                
-                                break  // Found EXIF, no need to continue
                             }
                         }
                         
-                        i += 2 + segmentLength
-                    } else if (bytes[i] === 0xFF && (bytes[i + 1] & 0xF0) === 0xE0) {
-                        var segLen = (bytes[i + 2] << 8) | bytes[i + 3]
-                        i += 2 + segLen
-                    } else if (bytes[i] === 0xFF && bytes[i + 1] === 0xDA) {
-                        break
-                    } else {
-                        i++
+                        entryOffset += 12
                     }
                 }
             } catch (e) {
@@ -902,6 +993,28 @@ WallpaperItem {
             
             root.loading = true
             
+            // Extract filename from URL for display in OSD
+            var cleanUrlForName = imageUrl
+            if (imageUrl.indexOf("@") !== -1) {
+                var parts = imageUrl.split("@")
+                if (parts.length > 1) {
+                    cleanUrlForName = parts[1]
+                    if (!cleanUrlForName.startsWith("http")) {
+                        cleanUrlForName = "https://" + cleanUrlForName
+                    }
+                }
+            }
+            var fileName = cleanUrlForName.split("/").pop()
+            if (fileName.indexOf("?") !== -1) {
+                fileName = fileName.split("?")[0]
+            }
+            try {
+                fileName = decodeURIComponent(fileName)
+            } catch (e) {
+                // If decoding fails, use as-is
+            }
+            currentExifData.fileName = fileName
+            
             // Check cache first
             var cachedDataUrl = getCachedDataUrl(imageUrl)
             if (cachedDataUrl) {
@@ -910,8 +1023,8 @@ WallpaperItem {
                 // Note: EXIF data may not be available from cache, OSD will show if available
                 createImageComponent(cachedDataUrl, imageUrl, skipAnimation, currentExifData.orientation)
                 
-                // Update OSD if EXIF info is enabled and available
-                if (root.configuration.ShowExifInfo && currentExifData.hasData) {
+                // Update OSD if EXIF info is enabled and we have filename or EXIF data
+                if (root.configuration.ShowExifInfo && (currentExifData.fileName !== "" || currentExifData.hasData)) {
                     exifOsd.opacity = 1.0
                     if (root.configuration.ExifInfoDuration > 0) {
                         exifHideTimer.restart()
@@ -958,6 +1071,20 @@ WallpaperItem {
                     if (xhr.status === 200) {
                         // Removed verbose download logging to prevent log bloat
                         
+                        // Extract filename from URL for display in OSD
+                        var fileName = cleanUrl.split("/").pop()
+                        // Remove query parameters if any
+                        if (fileName.indexOf("?") !== -1) {
+                            fileName = fileName.split("?")[0]
+                        }
+                        // Decode URL encoding
+                        try {
+                            fileName = decodeURIComponent(fileName)
+                        } catch (e) {
+                            // If decoding fails, use as-is
+                        }
+                        currentExifData.fileName = fileName
+                        
                         // Read EXIF orientation before converting to base64
                         var orientation = 0
                         var mimeType = "image/jpeg"
@@ -967,12 +1094,17 @@ WallpaperItem {
                             mimeType = "image/gif"
                         } else if (cleanUrl.toLowerCase().indexOf(".webp") !== -1) {
                             mimeType = "image/webp"
+                        } else if (cleanUrl.toLowerCase().indexOf(".tif") !== -1) {
+                            mimeType = "image/tiff"
                         } else if (cleanUrl.toLowerCase().indexOf(".svg") !== -1) {
                             mimeType = "image/svg+xml"
                         }
                         
-                        // Read EXIF data for JPEG images
-                        if (mimeType === "image/jpeg") {
+                        // Read EXIF data for JPEG, TIFF, and WebP images
+                        // EXIF is supported in JPEG (standard), TIFF (native), and WebP (can contain EXIF)
+                        if (mimeType === "image/jpeg" || mimeType === "image/tiff" || 
+                            cleanUrl.toLowerCase().indexOf(".tif") !== -1 || 
+                            mimeType === "image/webp") {
                             orientation = readExifOrientation(xhr.response)
                             readExifTags(xhr.response)  // Read additional EXIF tags
                             
@@ -1009,8 +1141,8 @@ WallpaperItem {
                         // Create image component with data URL
                         createImageComponent(dataUrl, imageUrl, skipAnimation, orientation)
                         
-                        // Update OSD if EXIF info is enabled
-                        if (root.configuration.ShowExifInfo && currentExifData.hasData) {
+                        // Update OSD if EXIF info is enabled and we have filename or EXIF data
+                        if (root.configuration.ShowExifInfo && (currentExifData.fileName !== "" || currentExifData.hasData)) {
                             exifOsd.opacity = 1.0
                             if (root.configuration.ExifInfoDuration > 0) {
                                 exifHideTimer.restart()
@@ -1022,15 +1154,27 @@ WallpaperItem {
                             console.error("Authentication failed - check username and password")
                         } else if (xhr.status === 404) {
                             console.error("Image not found - check URL path")
+                        } else if (xhr.status === 0) {
+                            console.error("Network error - connection may be down")
                         }
                         root.loading = false
+                        // Try next image if available (same behavior as timeout)
+                        if (photoList.length > 1) {
+                            console.log("Skipping failed image, trying next...")
+                            carouselTimer.restart()
+                        }
                     }
                 }
             }
             
             xhr.onerror = function() {
-                console.error("Error loading image:", cleanUrl)
+                console.error("Network error loading image (connection may be down):", cleanUrl.replace(/https?:\/\/[^@]+@/, ""))
                 root.loading = false
+                // Try next image if available (same behavior as timeout)
+                if (photoList.length > 1) {
+                    console.log("Skipping failed image, trying next...")
+                    carouselTimer.restart()
+                }
             }
             
             xhr.send()
@@ -1113,6 +1257,15 @@ WallpaperItem {
         running: carouselController.initialized && carouselController.photoList.length > 0
         repeat: true
         onTriggered: carouselController.nextPhoto()
+    }
+    
+    // Retry timer for PROPFIND with exponential backoff
+    Timer {
+        id: retryTimer
+        repeat: false
+        onTriggered: {
+            carouselController.loadPhotos()
+        }
     }
 
     // Main image view with carousel transitions
@@ -1330,7 +1483,7 @@ WallpaperItem {
             }
             width: exifContent.implicitWidth + Kirigami.Units.gridUnit * 2
             height: exifContent.implicitHeight + Kirigami.Units.gridUnit * 2
-            // Show OSD when ShowExifInfo is enabled AND we have EXIF data AND opacity > 0
+            // Show OSD when ShowExifInfo is enabled AND we have EXIF data or filename AND opacity > 0
             // Using explicit binding to ensure visibility updates correctly
             visible: root.configuration.ShowExifInfo && 
                     (carouselController.currentExifData.hasData || 
@@ -1340,7 +1493,8 @@ WallpaperItem {
                      carouselController.currentExifData.model !== "" ||
                      carouselController.currentExifData.iso > 0 ||
                      carouselController.currentExifData.fNumber > 0 ||
-                     carouselController.currentExifData.exposureTime !== "") && 
+                     carouselController.currentExifData.exposureTime !== "" ||
+                     carouselController.currentExifData.fileName !== "") && 
                     opacity > 0
             opacity: 0
             color: Qt.rgba(0, 0, 0, 0.75)  // Semi-transparent black background
@@ -1374,6 +1528,19 @@ WallpaperItem {
                         pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.1
                     }
                     color: "white"
+                }
+                
+                // Filename
+                Text {
+                    visible: carouselController.currentExifData.fileName !== ""
+                    text: i18n("File: %1", carouselController.currentExifData.fileName)
+                    font {
+                        bold: true
+                        pixelSize: Kirigami.Theme.defaultFont.pixelSize * 0.95
+                    }
+                    color: "white"
+                    elide: Text.ElideMiddle  // Truncate long filenames with "..."
+                    maximumLineCount: 1
                 }
                 
                 // Date/Time
@@ -1487,15 +1654,16 @@ WallpaperItem {
             // When ShowExifInfo is enabled, show OSD if we have any EXIF data
             // This works even if the option is enabled after image is already loaded
             if (root.configuration.ShowExifInfo) {
-                // Force update of hasData by checking if we have any EXIF data
-                // Check if orientation is non-zero or any other EXIF field is set
+                // Force update of hasData by checking if we have any EXIF data or filename
+                // Check if orientation is non-zero or any other EXIF field is set, or filename is available
                 var hasAnyData = carouselController.currentExifData.orientation !== 0 ||
                                  carouselController.currentExifData.dateTime !== "" ||
                                  carouselController.currentExifData.make !== "" ||
                                  carouselController.currentExifData.model !== "" ||
                                  carouselController.currentExifData.iso > 0 ||
                                  carouselController.currentExifData.fNumber > 0 ||
-                                 carouselController.currentExifData.exposureTime !== ""
+                                 carouselController.currentExifData.exposureTime !== "" ||
+                                 carouselController.currentExifData.fileName !== ""
                 
                 if (hasAnyData) {
                     // Ensure hasData is set correctly
