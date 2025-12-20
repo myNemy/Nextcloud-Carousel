@@ -589,6 +589,10 @@ WallpaperItem {
         // QML doesn't always detect changes to nested object properties in property var
         property string currentFileName: ""
         
+        // Unique identifier for current image to prevent location updates for wrong image
+        // This ensures reverse geocoding responses only update the correct image
+        property string currentImageId: ""
+        
         // Optimized: Only searches first 64KB where EXIF data is always located (prevents UI blocking on large images)
         // Extended to read multiple EXIF tags
         function readExifData(arrayBuffer) {
@@ -609,6 +613,8 @@ WallpaperItem {
                 city: "",
                 hasData: false
             }
+            // Reset image ID when reading new EXIF data
+            currentImageId = ""
             
             var orientation = readExifOrientation(arrayBuffer)
             // Force update to trigger QML bindings
@@ -868,7 +874,10 @@ WallpaperItem {
                 
                 // If we found EXIF/TIFF data, parse it
                 console.log("🌍 readExifTags: tiffOffset found:", tiffOffset)
-                if (tiffOffset >= 0 && tiffOffset + 8 <= bytes.length) {
+                if (tiffOffset < 0 || tiffOffset + 8 > bytes.length) {
+                    console.log("🌍 GPS search skipped - tiffOffset not found or invalid")
+                } else {
+                    // Parse EXIF data
                     isIntel = (bytes[tiffOffset] === 0x49 && bytes[tiffOffset + 1] === 0x49)
                     console.log("🌍 readExifTags: byte order isIntel:", isIntel)
                     
@@ -1325,18 +1334,16 @@ WallpaperItem {
                                 // after the image data URL is created, so we can wait for it before showing the image
                                 console.log("🌍 GPS coordinates found, reverse geocoding will be done during preload")
                             }
+                        } else {
+                            console.log("🌍 GPS IFD found but address out of bounds")
                         }
                     } else {
-                        console.log("🌍 GPS IFD found but address out of bounds")
+                        console.log("🌍 No GPSInfo tag (0x8825) found in IFD0 - image has no GPS data")
                     }
-                } else {
-                    console.log("🌍 No GPSInfo tag (0x8825) found in IFD0 - image has no GPS data")
                 }
-            } else {
-                console.log("🌍 GPS search skipped - tiffOffset not found")
+            } catch (e) {
+                console.warn("❌ Error reading EXIF tags:", e)
             }
-        } catch (e) {
-            console.warn("❌ Error reading EXIF tags:", e)
         }
         
         // Track active reverse geocoding requests to prevent too many simultaneous requests
@@ -1354,13 +1361,19 @@ WallpaperItem {
         // Reverse geocoding function to get country and city from GPS coordinates
         // Uses Nominatim (OpenStreetMap) free service
         // If callback is provided, it will be called when geocoding completes (or immediately if cached)
-        function reverseGeocode(lat, lon, callback) {
+        // imageId: unique identifier for the image to prevent updating wrong image
+        function reverseGeocode(lat, lon, callback, imageId) {
             if (lat === 0 && lon === 0) {
+                // Call callback even when coordinates are 0,0 (no GPS data)
+                if (callback && typeof callback === "function") {
+                    callback(false, "", "")  // false = no GPS data, empty = no location
+                }
                 return
             }
             
-            // Round coordinates to 4 decimal places for cache key (about 11 meters precision)
-            var cacheKey = Math.round(lat * 10000) / 10000 + "," + Math.round(lon * 10000) / 10000
+            // Round coordinates to 6 decimal places for cache key (about 0.1 meters precision)
+            // Increased precision to prevent different images with similar coordinates from sharing cache
+            var cacheKey = Math.round(lat * 1000000) / 1000000 + "," + Math.round(lon * 1000000) / 1000000
             
             // Check cache first
             if (geocodeCache[cacheKey]) {
@@ -1371,22 +1384,59 @@ WallpaperItem {
                 
                 console.log("🌍 Using cached location for", lat, lon, "- Country:", cached.country, "City:", cached.city)
                 
-                // Verify coordinates still match before using cache
-                if (currentExifData && 
+                // Verify image ID and coordinates still match before using cache
+                // CRITICAL: imageId must match if provided (it's the most reliable check)
+                var imageIdMatch = true
+                if (imageId && imageId !== "") {
+                    imageIdMatch = (currentImageId === imageId)
+                    if (!imageIdMatch) {
+                        console.log("🌍 Cache: Image ID mismatch - request:", imageId, "current:", currentImageId)
+                    }
+                }
+                
+                var coordsMatch = currentExifData && 
                     Math.abs((currentExifData.latitude || 0) - lat) < 0.0001 && 
-                    Math.abs((currentExifData.longitude || 0) - lon) < 0.0001) {
-                    var exifData = currentExifData
-                    exifData.country = cached.country
-                    exifData.city = cached.city
-                    exifData.hasData = true
+                    Math.abs((currentExifData.longitude || 0) - lon) < 0.0001
+                
+                if (!coordsMatch) {
+                    console.log("🌍 Cache: Coordinates mismatch - request:", lat, lon, "current:", currentExifData.latitude, currentExifData.longitude)
+                }
+                
+                if (imageIdMatch && coordsMatch) {
+                    console.log("🌍 ✅ Cache match verified - applying cached location")
+                    // Create new object to force QML binding update
+                    var exifData = {
+                        orientation: currentExifData.orientation,
+                        dateTime: currentExifData.dateTime,
+                        make: currentExifData.make,
+                        model: currentExifData.model,
+                        iso: currentExifData.iso,
+                        fNumber: currentExifData.fNumber,
+                        exposureTime: currentExifData.exposureTime,
+                        latitude: currentExifData.latitude,
+                        longitude: currentExifData.longitude,
+                        latitudeRef: currentExifData.latitudeRef,
+                        longitudeRef: currentExifData.longitudeRef,
+                        country: cached.country,
+                        city: cached.city,
+                        hasData: true
+                    }
                     currentExifData = exifData
+                    console.log("🌍 Cached location applied - Country:", cached.country, "City:", cached.city)
                     
                     // Call callback immediately if cached
                     if (callback && typeof callback === "function") {
                         callback(true, cached.country, cached.city)  // true = from cache
                     }
-                } else if (callback && typeof callback === "function") {
-                    callback(false, "", "")  // Coordinates changed, callback anyway
+                } else {
+                    if (!imageIdMatch) {
+                        console.warn("⚠️  Cached location IGNORED - image changed (request ID:", imageId, "current ID:", currentImageId + ")")
+                    } else {
+                        console.warn("⚠️  Cached location IGNORED - coordinates changed (request:", lat, lon, "current:", currentExifData.latitude, currentExifData.longitude + ")")
+                    }
+                    if (callback && typeof callback === "function") {
+                        callback(false, "", "")  // Image or coordinates changed, callback anyway
+                    }
                 }
                 return
             }
@@ -1394,13 +1444,18 @@ WallpaperItem {
             // Limit concurrent requests (Nominatim has rate limits)
             if (activeGeocodeRequests.length >= 3) {
                 console.log("🌍 Reverse geocoding: too many active requests, skipping")
+                // Call callback even when skipping to prevent hanging
+                if (callback && typeof callback === "function") {
+                    callback(false, "", "")  // false = skipped, empty = too many requests
+                }
                 return
             }
             
-            // Store coordinates for verification when response arrives
+            // Store coordinates and image ID for verification when response arrives
             // This prevents overwriting data from a different image
             var requestLat = lat
             var requestLon = lon
+            var requestImageId = imageId || ""  // Store image ID to verify it's still the current image
             var requestId = cacheKey  // Use cache key as request ID
             
             // Use Nominatim reverse geocoding API (free, no API key required)
@@ -1433,25 +1488,51 @@ WallpaperItem {
                             // Safety check: verify response exists and is not empty
                             if (!xhr.responseText || xhr.responseText.trim() === "") {
                                 console.warn("❌ Reverse geocoding: empty response")
+                                // Call callback with error
+                                if (callback && typeof callback === "function") {
+                                    callback(false, "", "")  // false = from API, empty = error
+                                }
+                                cleanup()
                                 return
                             }
                             
-                            // CRITICAL: Verify coordinates still match before updating
+                            // CRITICAL: Verify image ID and coordinates still match before updating
                             // This prevents overwriting data from a different image that loaded in the meantime
                             if (!currentExifData) {
                                 console.warn("❌ Reverse geocoding: currentExifData is null")
+                                // Call callback even if currentExifData is null
+                                if (callback && typeof callback === "function") {
+                                    callback(false, "", "")  // false = from API, empty = error
+                                }
+                                cleanup()
+                                return
+                            }
+                            
+                            // First check: verify image ID matches (most reliable check)
+                            if (requestImageId && requestImageId !== "" && currentImageId !== requestImageId) {
+                                console.log("🌍 Reverse geocoding response ignored - image changed (request ID:", requestImageId, "current ID:", currentImageId + ")")
+                                // Call callback even if image changed
+                                if (callback && typeof callback === "function") {
+                                    callback(false, "", "")  // false = from API, empty = image changed
+                                }
+                                cleanup()
                                 return
                             }
                             
                             var currentLat = currentExifData.latitude || 0
                             var currentLon = currentExifData.longitude || 0
                             
-                            // Check if coordinates match (with small tolerance for floating point)
+                            // Second check: verify coordinates match (with small tolerance for floating point)
                             var latMatch = Math.abs(currentLat - requestLat) < 0.0001
                             var lonMatch = Math.abs(currentLon - requestLon) < 0.0001
                             
                             if (!latMatch || !lonMatch) {
                                 console.log("🌍 Reverse geocoding response ignored - coordinates changed (request:", requestLat, requestLon, "current:", currentLat, currentLon + ")")
+                                // Call callback even if coordinates changed
+                                if (callback && typeof callback === "function") {
+                                    callback(false, "", "")  // false = from API, empty = coordinates changed
+                                }
+                                cleanup()
                                 return
                             }
                             
@@ -1461,11 +1542,21 @@ WallpaperItem {
                                 response = JSON.parse(xhr.responseText)
                             } catch (parseError) {
                                 console.warn("❌ Reverse geocoding: JSON parse error:", parseError, "Response:", xhr.responseText.substring(0, 200))
+                                // Call callback with error
+                                if (callback && typeof callback === "function") {
+                                    callback(false, "", "")  // false = from API, empty = parse error
+                                }
+                                cleanup()
                                 return
                             }
                             
                             if (!response) {
                                 console.warn("❌ Reverse geocoding: parsed response is null")
+                                // Call callback with error
+                                if (callback && typeof callback === "function") {
+                                    callback(false, "", "")  // false = from API, empty = null response
+                                }
+                                cleanup()
                                 return
                             }
                             
@@ -1473,6 +1564,11 @@ WallpaperItem {
                                 var address = response.address
                                 if (!address || typeof address !== "object") {
                                     console.warn("❌ Reverse geocoding: invalid address object")
+                                    // Call callback with error
+                                    if (callback && typeof callback === "function") {
+                                        callback(false, "", "")  // false = from API, empty = invalid address
+                                    }
+                                    cleanup()
                                     return
                                 }
                                 
@@ -1484,11 +1580,28 @@ WallpaperItem {
                                 
                                 var requestDuration = Date.now() - requestStartTime
                                 console.log("🌍 Reverse geocoding result for", requestLat, requestLon, "- Country:", country, "City:", city, "- Duration:", requestDuration, "ms")
+                                console.log("🌍 Verifying match - requestImageId:", requestImageId, "currentImageId:", currentImageId)
                                 
-                                // Double-check coordinates still match before updating
-                                if (currentExifData && 
+                                // Double-check image ID and coordinates still match before updating
+                                // CRITICAL: imageId must match if provided (it's the most reliable check)
+                                var imageIdMatch = true
+                                if (requestImageId && requestImageId !== "") {
+                                    imageIdMatch = (currentImageId === requestImageId)
+                                    if (!imageIdMatch) {
+                                        console.log("🌍 Image ID mismatch - request:", requestImageId, "current:", currentImageId)
+                                    }
+                                }
+                                
+                                var coordsMatch = currentExifData && 
                                     Math.abs((currentExifData.latitude || 0) - requestLat) < 0.0001 && 
-                                    Math.abs((currentExifData.longitude || 0) - requestLon) < 0.0001) {
+                                    Math.abs((currentExifData.longitude || 0) - requestLon) < 0.0001
+                                
+                                if (!coordsMatch) {
+                                    console.log("🌍 Coordinates mismatch - request:", requestLat, requestLon, "current:", currentExifData.latitude, currentExifData.longitude)
+                                }
+                                
+                                if (imageIdMatch && coordsMatch) {
+                                    console.log("🌍 ✅ Match verified - updating location")
                                     // Store in cache for future use (with timestamp for potential TTL)
                                     geocodeCache[cacheKey] = {
                                         country: country,
@@ -1520,24 +1633,46 @@ WallpaperItem {
                                     }
                                     
                                     // Update currentExifData with location info
-                                    var exifData = currentExifData
-                                    exifData.country = country
-                                    exifData.city = city
-                                    exifData.hasData = true
+                                    // Create new object to force QML binding update
+                                    var exifData = {
+                                        orientation: currentExifData.orientation,
+                                        dateTime: currentExifData.dateTime,
+                                        make: currentExifData.make,
+                                        model: currentExifData.model,
+                                        iso: currentExifData.iso,
+                                        fNumber: currentExifData.fNumber,
+                                        exposureTime: currentExifData.exposureTime,
+                                        latitude: currentExifData.latitude,
+                                        longitude: currentExifData.longitude,
+                                        latitudeRef: currentExifData.latitudeRef,
+                                        longitudeRef: currentExifData.longitudeRef,
+                                        country: country,
+                                        city: city,
+                                        hasData: true
+                                    }
                                     currentExifData = exifData
+                                    console.log("🌍 Location updated in currentExifData - Country:", country, "City:", city)
                                     
                                     // Call callback if provided
                                     if (callback && typeof callback === "function") {
                                         callback(false, country, city)  // false = from API
                                     }
                                 } else {
-                                    console.log("🌍 Reverse geocoding update skipped - coordinates changed during processing")
+                                    if (!imageIdMatch) {
+                                        console.warn("⚠️  Reverse geocoding update SKIPPED - image changed (request ID:", requestImageId, "current ID:", currentImageId + ")")
+                                    } else {
+                                        console.warn("⚠️  Reverse geocoding update SKIPPED - coordinates changed (request:", requestLat, requestLon, "current:", currentExifData.latitude, currentExifData.longitude + ")")
+                                    }
                                     if (callback && typeof callback === "function") {
-                                        callback(false, "", "")  // Coordinates changed
+                                        callback(false, "", "")  // Image or coordinates changed
                                     }
                                 }
                             } else {
                                 console.log("🌍 Reverse geocoding: no address in response")
+                                // Call callback even if no address found
+                                if (callback && typeof callback === "function") {
+                                    callback(false, "", "")  // false = from API, empty = no address
+                                }
                             }
                             cleanup()
                         } catch (e) {
@@ -1546,6 +1681,10 @@ WallpaperItem {
                         }
                     } else {
                         console.warn("❌ Reverse geocoding failed with status:", xhr.status)
+                        // Call callback with error even on failure
+                        if (callback && typeof callback === "function") {
+                            callback(false, "", "")  // false = from API, empty = error
+                        }
                         cleanup()
                     }
                 }
@@ -1553,13 +1692,22 @@ WallpaperItem {
             
             xhr.onerror = function() {
                 console.warn("❌ Reverse geocoding network error")
+                // Call callback with error
+                if (callback && typeof callback === "function") {
+                    callback(false, "", "")  // false = from API, empty = error
+                }
                 cleanup()
             }
             
-            // Set timeout to avoid blocking
-            xhr.timeout = 5000
+            // Set timeout to avoid blocking (increased from 5s to 15s for Nominatim API)
+            // Nominatim can be slow, especially with rate limits, so we need more time
+            xhr.timeout = 15000  // 15 seconds timeout for reverse geocoding
             xhr.ontimeout = function() {
-                console.warn("❌ Reverse geocoding timeout")
+                console.warn("❌ Reverse geocoding timeout after 15 seconds")
+                // Call callback with error
+                if (callback && typeof callback === "function") {
+                    callback(false, "", "")  // false = from API, empty = timeout
+                }
                 cleanup()
             }
             
@@ -1717,6 +1865,17 @@ WallpaperItem {
                         // EXIF is supported in JPEG (standard), TIFF (native), and WebP (can contain EXIF)
                         // Use magic bytes detection to ensure we read EXIF even if file extension is wrong
                         if (mimeType === "image/jpeg" || mimeType === "image/tiff" || mimeType === "image/webp") {
+                            // CRITICAL: Reset GPS coordinates and location BEFORE reading EXIF to prevent showing data from previous image
+                            // This ensures that if new image doesn't have GPS, coordinates are 0 and location is empty
+                            var exifDataReset = currentExifData
+                            exifDataReset.latitude = 0
+                            exifDataReset.longitude = 0
+                            exifDataReset.latitudeRef = ""
+                            exifDataReset.longitudeRef = ""
+                            exifDataReset.country = ""
+                            exifDataReset.city = ""
+                            currentExifData = exifDataReset
+                            
                             orientation = readExifOrientation(xhr.response)
                             readExifTags(xhr.response)  // Read additional EXIF tags
                             
@@ -1746,6 +1905,8 @@ WallpaperItem {
                             
                             // Force a complete refresh of currentExifData to ensure QML bindings update
                             // Create a completely new object to force QML to detect the change
+                            // CRITICAL: Always reset location here - it will be filled by reverse geocoding callback
+                            // This prevents showing location from previous image even if GPS coordinates are similar
                             var finalExifData = {
                                 orientation: currentExifData.orientation,
                                 dateTime: currentExifData.dateTime,
@@ -1758,8 +1919,8 @@ WallpaperItem {
                                 longitude: currentExifData.longitude,
                                 latitudeRef: currentExifData.latitudeRef,
                                 longitudeRef: currentExifData.longitudeRef,
-                                country: currentExifData.country,
-                                city: currentExifData.city,
+                                country: "",  // Always reset - will be filled by reverse geocoding
+                                city: "",  // Always reset - will be filled by reverse geocoding
                                 hasData: currentExifData.hasData
                             }
                             currentExifData = finalExifData
@@ -1794,16 +1955,24 @@ WallpaperItem {
                         // This is asynchronous - location will appear in OSD when response arrives
                         var hasGPS = currentExifData.latitude !== 0 && currentExifData.longitude !== 0
                         if (hasGPS) {
+                            // Generate unique image ID from filename and coordinates to prevent location updates for wrong image
+                            var imageId = currentFileName + "_" + currentExifData.latitude.toFixed(6) + "_" + currentExifData.longitude.toFixed(6)
+                            currentImageId = imageId  // Store current image ID
+                            
                             var geocodeStartTime = Date.now()
-                            console.log("🌍 Starting reverse geocoding for coordinates:", currentExifData.latitude, currentExifData.longitude)
+                            console.log("🌍 Starting reverse geocoding for coordinates:", currentExifData.latitude, currentExifData.longitude, "image ID:", imageId)
                             
                             // Start reverse geocoding (will use cache if available, otherwise async API call)
+                            // Pass imageId to ensure location only updates for the correct image
                             reverseGeocode(currentExifData.latitude, currentExifData.longitude, function(fromCache, country, city) {
                                 var duration = Date.now() - geocodeStartTime
                                 console.log("🌍 Reverse geocoding completed in", duration, "ms (cached:", fromCache, ")")
                                 // Location is already updated in currentExifData by reverseGeocode function
-                                // OSD will automatically update via QML bindings
-                            })
+                                // OSD will be updated by the main Qt.callLater below
+                            }, imageId)
+                        } else {
+                            // Reset image ID when no GPS data
+                            currentImageId = ""
                         }
                         
                         // Update OSD if EXIF info is enabled and we have filename or EXIF data
@@ -1815,7 +1984,12 @@ WallpaperItem {
                                       "GPS:", currentExifData.latitude, currentExifData.longitude)
                             
                             // Force a final refresh of currentExifData to ensure QML bindings update
+                            // This is called after reverse geocoding may have updated the location
+                            // Use Qt.callLater to ensure it runs after any pending reverse geocoding updates
                             Qt.callLater(function() {
+                                // Read current values (may have been updated by reverse geocoding)
+                                // IMPORTANT: Only preserve location if GPS coordinates match (prevent stale location from previous image)
+                                var hasGPS = currentExifData.latitude !== 0 && currentExifData.longitude !== 0
                                 var finalExifData = {
                                     orientation: currentExifData.orientation,
                                     dateTime: currentExifData.dateTime,
@@ -1828,8 +2002,8 @@ WallpaperItem {
                                     longitude: currentExifData.longitude,
                                     latitudeRef: currentExifData.latitudeRef,
                                     longitudeRef: currentExifData.longitudeRef,
-                                    country: currentExifData.country,
-                                    city: currentExifData.city,
+                                    country: hasGPS ? (currentExifData.country || "") : "",  // Reset if no GPS
+                                    city: hasGPS ? (currentExifData.city || "") : "",  // Reset if no GPS
                                     hasData: currentExifData.hasData
                                 }
                                 currentExifData = finalExifData
