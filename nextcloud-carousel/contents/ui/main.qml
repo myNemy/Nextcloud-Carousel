@@ -1867,13 +1867,23 @@ WallpaperItem {
                         if (mimeType === "image/jpeg" || mimeType === "image/tiff" || mimeType === "image/webp") {
                             // CRITICAL: Reset GPS coordinates and location BEFORE reading EXIF to prevent showing data from previous image
                             // This ensures that if new image doesn't have GPS, coordinates are 0 and location is empty
-                            var exifDataReset = currentExifData
-                            exifDataReset.latitude = 0
-                            exifDataReset.longitude = 0
-                            exifDataReset.latitudeRef = ""
-                            exifDataReset.longitudeRef = ""
-                            exifDataReset.country = ""
-                            exifDataReset.city = ""
+                            // Create new object to force QML binding update
+                            var exifDataReset = {
+                                orientation: currentExifData.orientation,
+                                dateTime: currentExifData.dateTime,
+                                make: currentExifData.make,
+                                model: currentExifData.model,
+                                iso: currentExifData.iso,
+                                fNumber: currentExifData.fNumber,
+                                exposureTime: currentExifData.exposureTime,
+                                latitude: 0,  // Reset GPS coordinates
+                                longitude: 0,  // Reset GPS coordinates
+                                latitudeRef: "",  // Reset GPS refs
+                                longitudeRef: "",  // Reset GPS refs
+                                country: "",  // Reset location
+                                city: "",  // Reset location
+                                hasData: currentExifData.hasData
+                            }
                             currentExifData = exifDataReset
                             
                             orientation = readExifOrientation(xhr.response)
