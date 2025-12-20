@@ -577,15 +577,22 @@ WallpaperItem {
             iso: 0,
             fNumber: 0,
             exposureTime: "",
-            fileName: "",  // Current image filename
+            latitude: 0,
+            longitude: 0,
+            latitudeRef: "",
+            longitudeRef: "",
+            country: "",
+            city: "",
             hasData: false
         })
+        // Separate property for filename to ensure QML binding works correctly
+        // QML doesn't always detect changes to nested object properties in property var
+        property string currentFileName: ""
         
         // Optimized: Only searches first 64KB where EXIF data is always located (prevents UI blocking on large images)
         // Extended to read multiple EXIF tags
         function readExifData(arrayBuffer) {
-            // Reset EXIF data (preserve fileName as it's set from URL)
-            var savedFileName = currentExifData.fileName || ""
+            // Reset EXIF data (fileName is stored separately in currentFileName property)
             currentExifData = {
                 orientation: 0,
                 dateTime: "",
@@ -594,18 +601,26 @@ WallpaperItem {
                 iso: 0,
                 fNumber: 0,
                 exposureTime: "",
-                fileName: savedFileName,  // Preserve filename
+                latitude: 0,
+                longitude: 0,
+                latitudeRef: "",
+                longitudeRef: "",
+                country: "",
+                city: "",
                 hasData: false
             }
             
             var orientation = readExifOrientation(arrayBuffer)
-            currentExifData.orientation = orientation
+            // Force update to trigger QML bindings
+            var exifData = currentExifData
+            exifData.orientation = orientation
             
             // If orientation was found (non-zero), we have EXIF data
             // This ensures hasData is true even if only orientation is available
             if (orientation !== 0) {
-                currentExifData.hasData = true
+                exifData.hasData = true
             }
+            currentExifData = exifData
             
             // Read additional EXIF tags
             readExifTags(arrayBuffer)
@@ -793,8 +808,10 @@ WallpaperItem {
         // Now supports JPEG, TIFF, and WebP
         function readExifTags(arrayBuffer) {
             try {
+                console.log("🌍 readExifTags called, arrayBuffer length:", arrayBuffer ? arrayBuffer.byteLength : "null")
                 var bytes = new Uint8Array(arrayBuffer)
                 if (bytes.length < 8) {
+                    console.log("🌍 readExifTags: too small, returning")
                     return  // Too small to contain EXIF
                 }
                 
@@ -802,6 +819,7 @@ WallpaperItem {
                 var isIntel = false
                 
                 var maxSearchBytes = Math.min(bytes.length, 65536)  // 64KB limit
+                console.log("🌍 readExifTags: searching for EXIF, maxSearchBytes:", maxSearchBytes)
                 
                 // Check if it's a JPEG (starts with 0xFFD8)
                 if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
@@ -849,12 +867,17 @@ WallpaperItem {
                 }
                 
                 // If we found EXIF/TIFF data, parse it
+                console.log("🌍 readExifTags: tiffOffset found:", tiffOffset)
                 if (tiffOffset >= 0 && tiffOffset + 8 <= bytes.length) {
                     isIntel = (bytes[tiffOffset] === 0x49 && bytes[tiffOffset + 1] === 0x49)
+                    console.log("🌍 readExifTags: byte order isIntel:", isIntel)
                     
                     // Read IFD0 offset
                     var ifd0OffsetAddr = tiffOffset + 4
-                    if (ifd0OffsetAddr + 4 > bytes.length) return
+                    if (ifd0OffsetAddr + 4 > bytes.length) {
+                        console.log("🌍 readExifTags: ifd0OffsetAddr out of bounds, returning")
+                        return
+                    }
                     
                     var ifd0Offset
                     if (isIntel) {
@@ -866,7 +889,11 @@ WallpaperItem {
                     }
                     
                     var ifd0Addr = tiffOffset + ifd0Offset
-                    if (ifd0Addr + 2 > bytes.length) return
+                    console.log("🌍 readExifTags: calculated ifd0Addr:", ifd0Addr, "bytes.length:", bytes.length)
+                    if (ifd0Addr + 2 > bytes.length) {
+                        console.log("🌍 GPS search skipped - ifd0Addr out of bounds")
+                        return
+                    }
                     
                     var numEntries
                     if (isIntel) {
@@ -874,9 +901,11 @@ WallpaperItem {
                     } else {
                         numEntries = (bytes[ifd0Addr] << 8) | bytes[ifd0Addr + 1]
                     }
+                    console.log("🌍 IFD0 found - addr:", ifd0Addr, "entries:", numEntries, "isIntel:", isIntel)
                     
                     // Read tags from IFD0
                     var entryOffset = ifd0Addr + 2
+                    console.log("🌍 Starting to read IFD0 tags, entryOffset:", entryOffset)
                     for (var e = 0; e < numEntries && entryOffset + 12 <= bytes.length; e++) {
                         var tag
                         if (isIntel) {
@@ -906,21 +935,48 @@ WallpaperItem {
                         var valueAddr = tiffOffset
                         
                         // If value fits in 4 bytes, it's stored directly, otherwise it's an offset
-                        if (type === 2 && count <= 4) {  // ASCII string
+                        if (type === 2) {  // ASCII string
                             var value = ""
-                            for (var c = 0; c < count - 1 && valueOffset + c < bytes.length; c++) {
-                                value += String.fromCharCode(bytes[valueOffset + c])
+                            // Handle both inline (count <= 4) and offset-based strings
+                            if (count <= 4) {
+                                // Value is stored directly in the entry
+                                for (var c = 0; c < count - 1 && valueOffset + c < bytes.length; c++) {
+                                    value += String.fromCharCode(bytes[valueOffset + c])
+                                }
+                            } else {
+                                // Value is stored at an offset
+                                var stringOffset
+                                if (isIntel) {
+                                    stringOffset = bytes[valueOffset] | (bytes[valueOffset + 1] << 8) | 
+                                                  (bytes[valueOffset + 2] << 16) | (bytes[valueOffset + 3] << 24)
+                                } else {
+                                    stringOffset = (bytes[valueOffset] << 24) | (bytes[valueOffset + 1] << 16) | 
+                                                  (bytes[valueOffset + 2] << 8) | bytes[valueOffset + 3]
+                                }
+                                var stringAddr = tiffOffset + stringOffset
+                                for (var c = 0; c < count - 1 && stringAddr + c < bytes.length; c++) {
+                                    value += String.fromCharCode(bytes[stringAddr + c])
+                                }
                             }
                             
                             if (tag === 0x0132) {  // DateTime
-                                currentExifData.dateTime = value
-                                currentExifData.hasData = true
+                                console.log("📅 Found DateTime tag in IFD0:", value)
+                                var exifData = currentExifData
+                                exifData.dateTime = value
+                                exifData.hasData = true
+                                currentExifData = exifData
                             } else if (tag === 0x010F) {  // Make
-                                currentExifData.make = value
-                                currentExifData.hasData = true
+                                console.log("📷 Found Make tag in IFD0:", value)
+                                var exifData = currentExifData
+                                exifData.make = value
+                                exifData.hasData = true
+                                currentExifData = exifData
                             } else if (tag === 0x0110) {  // Model
-                                currentExifData.model = value
-                                currentExifData.hasData = true
+                                console.log("📷 Found Model tag in IFD0:", value)
+                                var exifData = currentExifData
+                                exifData.model = value
+                                exifData.hasData = true
+                                currentExifData = exifData
                             }
                         } else if (type === 3 && count === 1) {  // Short (2 bytes)
                             var shortValue
@@ -930,10 +986,8 @@ WallpaperItem {
                                 shortValue = (bytes[valueOffset] << 8) | bytes[valueOffset + 1]
                             }
                             
-                            if (tag === 0x8827) {  // ISO
-                                currentExifData.iso = shortValue
-                                currentExifData.hasData = true
-                            }
+                            // ISO can be in IFD0 or EXIF IFD, but we'll read it from EXIF IFD
+                            // (handled below when reading EXIF IFD)
                         } else if (type === 5 && count === 1) {  // Rational (2 longs)
                             // Read offset to rational value
                             var rationalOffset
@@ -945,42 +999,571 @@ WallpaperItem {
                                                (bytes[valueOffset + 2] << 8) | bytes[valueOffset + 3]
                             }
                             
-                            var rationalAddr = tiffOffset + rationalOffset
-                            if (rationalAddr + 8 <= bytes.length) {
-                                var numerator, denominator
-                                if (isIntel) {
-                                    numerator = bytes[rationalAddr] | (bytes[rationalAddr + 1] << 8) | 
-                                              (bytes[rationalAddr + 2] << 16) | (bytes[rationalAddr + 3] << 24)
-                                    denominator = bytes[rationalAddr + 4] | (bytes[rationalAddr + 5] << 8) | 
-                                                (bytes[rationalAddr + 6] << 16) | (bytes[rationalAddr + 7] << 24)
-                                } else {
-                                    numerator = (bytes[rationalAddr] << 24) | (bytes[rationalAddr + 1] << 16) | 
-                                              (bytes[rationalAddr + 2] << 8) | bytes[rationalAddr + 3]
-                                    denominator = (bytes[rationalAddr + 4] << 24) | (bytes[rationalAddr + 5] << 16) | 
-                                                (bytes[rationalAddr + 6] << 8) | bytes[rationalAddr + 7]
-                                }
-                                
-                                if (tag === 0x829D && denominator > 0) {  // FNumber
-                                    currentExifData.fNumber = numerator / denominator
-                                    currentExifData.hasData = true
-                                } else if (tag === 0x829A && denominator > 0) {  // ExposureTime
-                                    var expTime = numerator / denominator
-                                    if (expTime < 1) {
-                                        currentExifData.exposureTime = "1/" + Math.round(1 / expTime) + "s"
-                                    } else {
-                                        currentExifData.exposureTime = expTime.toFixed(1) + "s"
-                                    }
-                                    currentExifData.hasData = true
-                                }
-                            }
+                            // FNumber and ExposureTime are typically in EXIF IFD, not IFD0
+                            // We'll read them from EXIF IFD (handled below)
                         }
                         
                         entryOffset += 12
                     }
+                    console.log("🌍 Finished reading IFD0 tags, now searching for EXIF IFD")
+                    
+                    // Read EXIF IFD (subdirectory) for ISO, FNumber, ExposureTime
+                    // These tags are typically in EXIF IFD, not IFD0
+                    // Also search for GPSInfo tag (0x8825) in IFD0 - according to EXIF spec, it's in IFD0
+                    entryOffset = ifd0Addr + 2
+                    var exifIFDOffset = -1
+                    var gpsIFDOffset = -1  // Store GPS IFD offset found in IFD0
+                    console.log("🌍 Searching IFD0 for ExifOffset (0x8769) and GPSInfo (0x8825) tags")
+                    for (var e2 = 0; e2 < numEntries && entryOffset + 12 <= bytes.length; e2++) {
+                        var tag2
+                        if (isIntel) {
+                            tag2 = bytes[entryOffset] | (bytes[entryOffset + 1] << 8)
+                        } else {
+                            tag2 = (bytes[entryOffset] << 8) | bytes[entryOffset + 1]
+                        }
+                        
+                        // Read tag type to determine how to read the value
+                        var type2
+                        if (isIntel) {
+                            type2 = bytes[entryOffset + 2] | (bytes[entryOffset + 3] << 8)
+                        } else {
+                            type2 = (bytes[entryOffset + 2] << 8) | bytes[entryOffset + 3]
+                        }
+                        
+                        var valueOffset2 = entryOffset + 8
+                        
+                        if (tag2 === 0x8769) {  // ExifOffset tag (unsigned long)
+                            // Read offset to EXIF IFD
+                            if (isIntel) {
+                                exifIFDOffset = bytes[valueOffset2] | (bytes[valueOffset2 + 1] << 8) | 
+                                                (bytes[valueOffset2 + 2] << 16) | (bytes[valueOffset2 + 3] << 24)
+                            } else {
+                                exifIFDOffset = (bytes[valueOffset2] << 24) | (bytes[valueOffset2 + 1] << 16) | 
+                                                (bytes[valueOffset2 + 2] << 8) | bytes[valueOffset2 + 3]
+                            }
+                            console.log("🔍 Found ExifOffset tag (0x8769), EXIF IFD at offset:", exifIFDOffset)
+                        } else if (tag2 === 0x8825) {  // GPSInfo tag (unsigned long) - according to EXIF spec
+                            // Read offset to GPS IFD
+                            if (isIntel) {
+                                gpsIFDOffset = bytes[valueOffset2] | (bytes[valueOffset2 + 1] << 8) | 
+                                               (bytes[valueOffset2 + 2] << 16) | (bytes[valueOffset2 + 3] << 24)
+                            } else {
+                                gpsIFDOffset = (bytes[valueOffset2] << 24) | (bytes[valueOffset2 + 1] << 16) | 
+                                               (bytes[valueOffset2 + 2] << 8) | bytes[valueOffset2 + 3]
+                            }
+                            console.log("🌍 ✅ Found GPSInfo tag (0x8825) in IFD0, GPS IFD at offset:", gpsIFDOffset)
+                        }
+                        entryOffset += 12
+                    }
+                    
+                    // If we found EXIF IFD, read tags from it
+                    if (exifIFDOffset >= 0) {
+                        var exifIFDAddr = tiffOffset + exifIFDOffset
+                        if (exifIFDAddr + 2 <= bytes.length) {
+                            var numExifEntries
+                            if (isIntel) {
+                                numExifEntries = bytes[exifIFDAddr] | (bytes[exifIFDAddr + 1] << 8)
+                            } else {
+                                numExifEntries = (bytes[exifIFDAddr] << 8) | bytes[exifIFDAddr + 1]
+                            }
+                            console.log("📊 Reading EXIF IFD with", numExifEntries, "entries")
+                            
+                            var exifEntryOffset = exifIFDAddr + 2
+                            for (var e3 = 0; e3 < numExifEntries && exifEntryOffset + 12 <= bytes.length; e3++) {
+                                var tag3
+                                if (isIntel) {
+                                    tag3 = bytes[exifEntryOffset] | (bytes[exifEntryOffset + 1] << 8)
+                                } else {
+                                    tag3 = (bytes[exifEntryOffset] << 8) | bytes[exifEntryOffset + 1]
+                                }
+                                
+                                var type3
+                                if (isIntel) {
+                                    type3 = bytes[exifEntryOffset + 2] | (bytes[exifEntryOffset + 3] << 8)
+                                } else {
+                                    type3 = (bytes[exifEntryOffset + 2] << 8) | bytes[exifEntryOffset + 3]
+                                }
+                                
+                                var count3
+                                if (isIntel) {
+                                    count3 = bytes[exifEntryOffset + 4] | (bytes[exifEntryOffset + 5] << 8) | 
+                                            (bytes[exifEntryOffset + 6] << 16) | (bytes[exifEntryOffset + 7] << 24)
+                                } else {
+                                    count3 = (bytes[exifEntryOffset + 4] << 24) | (bytes[exifEntryOffset + 5] << 16) | 
+                                            (bytes[exifEntryOffset + 6] << 8) | bytes[exifEntryOffset + 7]
+                                }
+                                
+                                var valueOffset3 = exifEntryOffset + 8
+                                
+                                // Read ISO (0x8827) - Short type
+                                if (tag3 === 0x8827 && type3 === 3 && count3 === 1) {
+                                    var isoValue
+                                    if (isIntel) {
+                                        isoValue = bytes[valueOffset3] | (bytes[valueOffset3 + 1] << 8)
+                                    } else {
+                                        isoValue = (bytes[valueOffset3] << 8) | bytes[valueOffset3 + 1]
+                                    }
+                                    console.log("📸 Found ISO tag (0x8827) in EXIF IFD:", isoValue)
+                                    var exifData = currentExifData
+                                    exifData.iso = isoValue
+                                    exifData.hasData = true
+                                    currentExifData = exifData
+                                }
+                                // Read FNumber (0x829D) and ExposureTime (0x829A) - Rational type
+                                else if ((tag3 === 0x829D || tag3 === 0x829A) && type3 === 5 && count3 === 1) {
+                                    var rationalOffset3
+                                    if (isIntel) {
+                                        rationalOffset3 = bytes[valueOffset3] | (bytes[valueOffset3 + 1] << 8) | 
+                                                         (bytes[valueOffset3 + 2] << 16) | (bytes[valueOffset3 + 3] << 24)
+                                    } else {
+                                        rationalOffset3 = (bytes[valueOffset3] << 24) | (bytes[valueOffset3 + 1] << 16) | 
+                                                         (bytes[valueOffset3 + 2] << 8) | bytes[valueOffset3 + 3]
+                                    }
+                                    
+                                    var rationalAddr3 = tiffOffset + rationalOffset3
+                                    if (rationalAddr3 + 8 <= bytes.length) {
+                                        var numerator3, denominator3
+                                        if (isIntel) {
+                                            numerator3 = bytes[rationalAddr3] | (bytes[rationalAddr3 + 1] << 8) | 
+                                                         (bytes[rationalAddr3 + 2] << 16) | (bytes[rationalAddr3 + 3] << 24)
+                                            denominator3 = bytes[rationalAddr3 + 4] | (bytes[rationalAddr3 + 5] << 8) | 
+                                                          (bytes[rationalAddr3 + 6] << 16) | (bytes[rationalAddr3 + 7] << 24)
+                                        } else {
+                                            numerator3 = (bytes[rationalAddr3] << 24) | (bytes[rationalAddr3 + 1] << 16) | 
+                                                         (bytes[rationalAddr3 + 2] << 8) | bytes[rationalAddr3 + 3]
+                                            denominator3 = (bytes[rationalAddr3 + 4] << 24) | (bytes[rationalAddr3 + 5] << 16) | 
+                                                          (bytes[rationalAddr3 + 6] << 8) | bytes[rationalAddr3 + 7]
+                                        }
+                                        
+                                        if (denominator3 > 0) {
+                                            var exifData = currentExifData
+                                            if (tag3 === 0x829D) {  // FNumber
+                                                var fNum = numerator3 / denominator3
+                                                console.log("📸 Found FNumber tag (0x829D) in EXIF IFD:", fNum)
+                                                exifData.fNumber = fNum
+                                                exifData.hasData = true
+                                                currentExifData = exifData
+                                            } else if (tag3 === 0x829A) {  // ExposureTime
+                                                var expTime = numerator3 / denominator3
+                                                var expTimeStr = expTime < 1 ? "1/" + Math.round(1 / expTime) + "s" : expTime.toFixed(1) + "s"
+                                                console.log("📸 Found ExposureTime tag (0x829A) in EXIF IFD:", expTimeStr)
+                                                exifData.exposureTime = expTimeStr
+                                                exifData.hasData = true
+                                                currentExifData = exifData
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                exifEntryOffset += 12
+                            }
+                        }
+                    }
+                    
+                    // Read GPS IFD (subdirectory) for GPS coordinates
+                    // GPS data is in a separate IFD referenced by GPSInfo tag (0x8825) in IFD0
+                    // According to EXIF spec, GPSInfo tag (0x8825) is in IFD0 (we already searched for it above)
+                    // gpsIFDOffset was found in the loop above when searching for ExifOffset
+                    console.log("🌍 About to read GPS IFD - gpsIFDOffset:", gpsIFDOffset)
+                    if (gpsIFDOffset >= 0) {
+                        var gpsIFDAddr = tiffOffset + gpsIFDOffset
+                        console.log("🌍 GPS IFD address:", gpsIFDAddr, "(tiffOffset:", tiffOffset, "+ gpsIFDOffset:", gpsIFDOffset + ")")
+                        if (gpsIFDAddr + 2 <= bytes.length) {
+                            var numGpsEntries
+                            if (isIntel) {
+                                numGpsEntries = bytes[gpsIFDAddr] | (bytes[gpsIFDAddr + 1] << 8)
+                            } else {
+                                numGpsEntries = (bytes[gpsIFDAddr] << 8) | bytes[gpsIFDAddr + 1]
+                            }
+                            console.log("🌍 Reading GPS IFD with", numGpsEntries, "entries")
+                            
+                            var gpsEntryOffset = gpsIFDAddr + 2
+                            var gpsLatitudeRef = ""
+                            var gpsLongitudeRef = ""
+                            var gpsLatitude = null  // Will be array of 3 rationals [degrees, minutes, seconds]
+                            var gpsLongitude = null  // Will be array of 3 rationals [degrees, minutes, seconds]
+                            
+                            for (var e5 = 0; e5 < numGpsEntries && gpsEntryOffset + 12 <= bytes.length; e5++) {
+                                var tag5
+                                if (isIntel) {
+                                    tag5 = bytes[gpsEntryOffset] | (bytes[gpsEntryOffset + 1] << 8)
+                                } else {
+                                    tag5 = (bytes[gpsEntryOffset] << 8) | bytes[gpsEntryOffset + 1]
+                                }
+                                
+                                var type5
+                                if (isIntel) {
+                                    type5 = bytes[gpsEntryOffset + 2] | (bytes[gpsEntryOffset + 3] << 8)
+                                } else {
+                                    type5 = (bytes[gpsEntryOffset + 2] << 8) | bytes[gpsEntryOffset + 3]
+                                }
+                                
+                                var count5
+                                if (isIntel) {
+                                    count5 = bytes[gpsEntryOffset + 4] | (bytes[gpsEntryOffset + 5] << 8) | 
+                                             (bytes[gpsEntryOffset + 6] << 16) | (bytes[gpsEntryOffset + 7] << 24)
+                                } else {
+                                    count5 = (bytes[gpsEntryOffset + 4] << 24) | (bytes[gpsEntryOffset + 5] << 16) | 
+                                             (bytes[gpsEntryOffset + 6] << 8) | bytes[gpsEntryOffset + 7]
+                                }
+                                
+                                var valueOffset5 = gpsEntryOffset + 8
+                                
+                                // Log GPS tags for debugging
+                                var tag5Hex = "0x" + tag5.toString(16).toUpperCase().padStart(4, '0')
+                                if (e5 < 10) {
+                                    console.log("🌍 GPS IFD tag", e5, ":", tag5Hex, "type:", type5, "count:", count5)
+                                }
+                                
+                                // Read GPSLatitudeRef (0x0001) - ASCII string
+                                if (tag5 === 0x0001 && type5 === 2 && count5 <= 2) {
+                                    gpsLatitudeRef = String.fromCharCode(bytes[valueOffset5])
+                                    console.log("🌍 Found GPSLatitudeRef:", gpsLatitudeRef)
+                                }
+                                // Read GPSLongitudeRef (0x0003) - ASCII string
+                                else if (tag5 === 0x0003 && type5 === 2 && count5 <= 2) {
+                                    gpsLongitudeRef = String.fromCharCode(bytes[valueOffset5])
+                                    console.log("🌍 Found GPSLongitudeRef:", gpsLongitudeRef)
+                                }
+                                // Read GPSLatitude (0x0002) - Rational (3 values: degrees, minutes, seconds)
+                                else if (tag5 === 0x0002 && type5 === 5 && count5 === 3) {
+                                    var latOffset
+                                    if (isIntel) {
+                                        latOffset = bytes[valueOffset5] | (bytes[valueOffset5 + 1] << 8) | 
+                                                   (bytes[valueOffset5 + 2] << 16) | (bytes[valueOffset5 + 3] << 24)
+                                    } else {
+                                        latOffset = (bytes[valueOffset5] << 24) | (bytes[valueOffset5 + 1] << 16) | 
+                                                   (bytes[valueOffset5 + 2] << 8) | bytes[valueOffset5 + 3]
+                                    }
+                                    
+                                    var latAddr = tiffOffset + latOffset
+                                    if (latAddr + 24 <= bytes.length) {
+                                        gpsLatitude = []
+                                        for (var i = 0; i < 3; i++) {
+                                            var latRationalAddr = latAddr + (i * 8)
+                                            var latNum, latDen
+                                            if (isIntel) {
+                                                latNum = bytes[latRationalAddr] | (bytes[latRationalAddr + 1] << 8) | 
+                                                         (bytes[latRationalAddr + 2] << 16) | (bytes[latRationalAddr + 3] << 24)
+                                                latDen = bytes[latRationalAddr + 4] | (bytes[latRationalAddr + 5] << 8) | 
+                                                         (bytes[latRationalAddr + 6] << 16) | (bytes[latRationalAddr + 7] << 24)
+                                            } else {
+                                                latNum = (bytes[latRationalAddr] << 24) | (bytes[latRationalAddr + 1] << 16) | 
+                                                         (bytes[latRationalAddr + 2] << 8) | bytes[latRationalAddr + 3]
+                                                latDen = (bytes[latRationalAddr + 4] << 24) | (bytes[latRationalAddr + 5] << 16) | 
+                                                         (bytes[latRationalAddr + 6] << 8) | bytes[latRationalAddr + 7]
+                                            }
+                                            if (latDen > 0) {
+                                                gpsLatitude.push(latNum / latDen)
+                                            }
+                                        }
+                                        console.log("🌍 Found GPSLatitude:", gpsLatitude)
+                                    }
+                                }
+                                // Read GPSLongitude (0x0004) - Rational (3 values: degrees, minutes, seconds)
+                                else if (tag5 === 0x0004 && type5 === 5 && count5 === 3) {
+                                    var lonOffset
+                                    if (isIntel) {
+                                        lonOffset = bytes[valueOffset5] | (bytes[valueOffset5 + 1] << 8) | 
+                                                   (bytes[valueOffset5 + 2] << 16) | (bytes[valueOffset5 + 3] << 24)
+                                    } else {
+                                        lonOffset = (bytes[valueOffset5] << 24) | (bytes[valueOffset5 + 1] << 16) | 
+                                                   (bytes[valueOffset5 + 2] << 8) | bytes[valueOffset5 + 3]
+                                    }
+                                    
+                                    var lonAddr = tiffOffset + lonOffset
+                                    if (lonAddr + 24 <= bytes.length) {
+                                        gpsLongitude = []
+                                        for (var j = 0; j < 3; j++) {
+                                            var lonRationalAddr = lonAddr + (j * 8)
+                                            var lonNum, lonDen
+                                            if (isIntel) {
+                                                lonNum = bytes[lonRationalAddr] | (bytes[lonRationalAddr + 1] << 8) | 
+                                                         (bytes[lonRationalAddr + 2] << 16) | (bytes[lonRationalAddr + 3] << 24)
+                                                lonDen = bytes[lonRationalAddr + 4] | (bytes[lonRationalAddr + 5] << 8) | 
+                                                         (bytes[lonRationalAddr + 6] << 16) | (bytes[lonRationalAddr + 7] << 24)
+                                            } else {
+                                                lonNum = (bytes[lonRationalAddr] << 24) | (bytes[lonRationalAddr + 1] << 16) | 
+                                                         (bytes[lonRationalAddr + 2] << 8) | bytes[lonRationalAddr + 3]
+                                                lonDen = (bytes[lonRationalAddr + 4] << 24) | (bytes[lonRationalAddr + 5] << 16) | 
+                                                         (bytes[lonRationalAddr + 6] << 8) | bytes[lonRationalAddr + 7]
+                                            }
+                                            if (lonDen > 0) {
+                                                gpsLongitude.push(lonNum / lonDen)
+                                            }
+                                        }
+                                        console.log("🌍 Found GPSLongitude:", gpsLongitude)
+                                    }
+                                }
+                                
+                                gpsEntryOffset += 12
+                            }
+                            
+                            // Convert GPS coordinates to decimal degrees and store
+                            if (gpsLatitude && gpsLatitude.length === 3 && gpsLongitude && gpsLongitude.length === 3) {
+                                var latDecimal = gpsLatitude[0] + (gpsLatitude[1] / 60) + (gpsLatitude[2] / 3600)
+                                var lonDecimal = gpsLongitude[0] + (gpsLongitude[1] / 60) + (gpsLongitude[2] / 3600)
+                                
+                                // Apply sign based on reference
+                                if (gpsLatitudeRef === "S") latDecimal = -latDecimal
+                                if (gpsLongitudeRef === "W") lonDecimal = -lonDecimal
+                                
+                                var exifData = currentExifData
+                                exifData.latitude = latDecimal
+                                exifData.longitude = lonDecimal
+                                exifData.latitudeRef = gpsLatitudeRef
+                                exifData.longitudeRef = gpsLongitudeRef
+                                // Reset location info - will be filled by reverse geocoding
+                                exifData.country = ""
+                                exifData.city = ""
+                                exifData.hasData = true
+                                currentExifData = exifData
+                                console.log("🌍 GPS coordinates:", latDecimal, lonDecimal)
+                                
+                                // Perform reverse geocoding to get country and city
+                                // NOTE: The actual reverse geocoding call happens later in loadImageWithAuth
+                                // after the image data URL is created, so we can wait for it before showing the image
+                                console.log("🌍 GPS coordinates found, reverse geocoding will be done during preload")
+                            }
+                        }
+                    } else {
+                        console.log("🌍 GPS IFD found but address out of bounds")
+                    }
+                } else {
+                    console.log("🌍 No GPSInfo tag (0x8825) found in IFD0 - image has no GPS data")
                 }
-            } catch (e) {
-                console.warn("❌ Error reading EXIF tags:", e)
+            } else {
+                console.log("🌍 GPS search skipped - tiffOffset not found")
             }
+        } catch (e) {
+            console.warn("❌ Error reading EXIF tags:", e)
+        }
+        
+        // Track active reverse geocoding requests to prevent too many simultaneous requests
+        property var activeGeocodeRequests: []
+        
+        // Cache for reverse geocoding results to avoid repeated requests for same coordinates
+        // Format: { "lat,lon": { country: "...", city: "...", timestamp: ... }, ... }
+        // Limited to 50 entries to prevent memory issues (each entry ~100-200 bytes = ~5-10 KB total)
+        property var geocodeCache: ({})
+        property int maxGeocodeCacheSize: 50  // Conservative limit to prevent OOM (different from maxCacheSize for image cache)
+        
+        // Pending reverse geocoding callback - called when geocoding completes
+        property var pendingGeocodeCallback: null
+        
+        // Reverse geocoding function to get country and city from GPS coordinates
+        // Uses Nominatim (OpenStreetMap) free service
+        // If callback is provided, it will be called when geocoding completes (or immediately if cached)
+        function reverseGeocode(lat, lon, callback) {
+            if (lat === 0 && lon === 0) {
+                return
+            }
+            
+            // Round coordinates to 4 decimal places for cache key (about 11 meters precision)
+            var cacheKey = Math.round(lat * 10000) / 10000 + "," + Math.round(lon * 10000) / 10000
+            
+            // Check cache first
+            if (geocodeCache[cacheKey]) {
+                var cached = geocodeCache[cacheKey]
+                
+                // Update timestamp for LRU (Least Recently Used) behavior
+                cached.timestamp = Date.now()
+                
+                console.log("🌍 Using cached location for", lat, lon, "- Country:", cached.country, "City:", cached.city)
+                
+                // Verify coordinates still match before using cache
+                if (currentExifData && 
+                    Math.abs((currentExifData.latitude || 0) - lat) < 0.0001 && 
+                    Math.abs((currentExifData.longitude || 0) - lon) < 0.0001) {
+                    var exifData = currentExifData
+                    exifData.country = cached.country
+                    exifData.city = cached.city
+                    exifData.hasData = true
+                    currentExifData = exifData
+                    
+                    // Call callback immediately if cached
+                    if (callback && typeof callback === "function") {
+                        callback(true, cached.country, cached.city)  // true = from cache
+                    }
+                } else if (callback && typeof callback === "function") {
+                    callback(false, "", "")  // Coordinates changed, callback anyway
+                }
+                return
+            }
+            
+            // Limit concurrent requests (Nominatim has rate limits)
+            if (activeGeocodeRequests.length >= 3) {
+                console.log("🌍 Reverse geocoding: too many active requests, skipping")
+                return
+            }
+            
+            // Store coordinates for verification when response arrives
+            // This prevents overwriting data from a different image
+            var requestLat = lat
+            var requestLon = lon
+            var requestId = cacheKey  // Use cache key as request ID
+            
+            // Use Nominatim reverse geocoding API (free, no API key required)
+            // Format: https://nominatim.openstreetmap.org/reverse?format=json&lat=LAT&lon=LON
+            var url = "https://nominatim.openstreetmap.org/reverse?format=json&lat=" + lat + "&lon=" + lon + "&zoom=10&addressdetails=1"
+            
+            // Track request start time for performance monitoring
+            var requestStartTime = Date.now()
+            console.log("🌍 Sending reverse geocoding request at", requestStartTime, "for", lat, lon)
+            
+            // Add request to active list
+            activeGeocodeRequests.push(requestId)
+            
+            var xhr = new XMLHttpRequest()
+            xhr.open("GET", url)
+            xhr.setRequestHeader("User-Agent", "Nextcloud-Carousel/1.0")  // Nominatim requires User-Agent
+            
+            // Cleanup function to remove request from active list
+            var cleanup = function() {
+                var index = activeGeocodeRequests.indexOf(requestId)
+                if (index !== -1) {
+                    activeGeocodeRequests.splice(index, 1)
+                }
+            }
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    if (xhr.status === 200) {
+                        try {
+                            // Safety check: verify response exists and is not empty
+                            if (!xhr.responseText || xhr.responseText.trim() === "") {
+                                console.warn("❌ Reverse geocoding: empty response")
+                                return
+                            }
+                            
+                            // CRITICAL: Verify coordinates still match before updating
+                            // This prevents overwriting data from a different image that loaded in the meantime
+                            if (!currentExifData) {
+                                console.warn("❌ Reverse geocoding: currentExifData is null")
+                                return
+                            }
+                            
+                            var currentLat = currentExifData.latitude || 0
+                            var currentLon = currentExifData.longitude || 0
+                            
+                            // Check if coordinates match (with small tolerance for floating point)
+                            var latMatch = Math.abs(currentLat - requestLat) < 0.0001
+                            var lonMatch = Math.abs(currentLon - requestLon) < 0.0001
+                            
+                            if (!latMatch || !lonMatch) {
+                                console.log("🌍 Reverse geocoding response ignored - coordinates changed (request:", requestLat, requestLon, "current:", currentLat, currentLon + ")")
+                                return
+                            }
+                            
+                            // Parse JSON with error handling
+                            var response
+                            try {
+                                response = JSON.parse(xhr.responseText)
+                            } catch (parseError) {
+                                console.warn("❌ Reverse geocoding: JSON parse error:", parseError, "Response:", xhr.responseText.substring(0, 200))
+                                return
+                            }
+                            
+                            if (!response) {
+                                console.warn("❌ Reverse geocoding: parsed response is null")
+                                return
+                            }
+                            
+                            if (response && response.address) {
+                                var address = response.address
+                                if (!address || typeof address !== "object") {
+                                    console.warn("❌ Reverse geocoding: invalid address object")
+                                    return
+                                }
+                                
+                                var country = (address.country && typeof address.country === "string") ? address.country : ""
+                                var city = (address.city && typeof address.city === "string") ? address.city : 
+                                          (address.town && typeof address.town === "string") ? address.town :
+                                          (address.village && typeof address.village === "string") ? address.village :
+                                          (address.municipality && typeof address.municipality === "string") ? address.municipality : ""
+                                
+                                var requestDuration = Date.now() - requestStartTime
+                                console.log("🌍 Reverse geocoding result for", requestLat, requestLon, "- Country:", country, "City:", city, "- Duration:", requestDuration, "ms")
+                                
+                                // Double-check coordinates still match before updating
+                                if (currentExifData && 
+                                    Math.abs((currentExifData.latitude || 0) - requestLat) < 0.0001 && 
+                                    Math.abs((currentExifData.longitude || 0) - requestLon) < 0.0001) {
+                                    // Store in cache for future use (with timestamp for potential TTL)
+                                    geocodeCache[cacheKey] = {
+                                        country: country,
+                                        city: city,
+                                        timestamp: Date.now()
+                                    }
+                                    
+                                    // Limit cache size to prevent memory issues (FIFO eviction)
+                                    // Each entry is small (~100-200 bytes), so 50 entries = ~5-10 KB total
+                                    var cacheKeys = Object.keys(geocodeCache)
+                                    if (cacheKeys.length > maxGeocodeCacheSize) {
+                                        // Sort by timestamp (oldest first) and remove oldest entries
+                                        var sortedKeys = cacheKeys.sort(function(a, b) {
+                                            var timeA = geocodeCache[a].timestamp || 0
+                                            var timeB = geocodeCache[b].timestamp || 0
+                                            return timeA - timeB
+                                        })
+                                        
+                                        var keysToRemove = sortedKeys.slice(0, sortedKeys.length - maxGeocodeCacheSize)
+                                        for (var i = 0; i < keysToRemove.length; i++) {
+                                            delete geocodeCache[keysToRemove[i]]
+                                        }
+                                        console.log("🌍 Cache cleanup: removed", keysToRemove.length, "old entries, cache size now:", Object.keys(geocodeCache).length)
+                                    }
+                                    
+                                    // Log cache size periodically for monitoring
+                                    if (cacheKeys.length % 10 === 0) {
+                                        console.log("🌍 Cache size:", cacheKeys.length, "/", maxGeocodeCacheSize, "entries")
+                                    }
+                                    
+                                    // Update currentExifData with location info
+                                    var exifData = currentExifData
+                                    exifData.country = country
+                                    exifData.city = city
+                                    exifData.hasData = true
+                                    currentExifData = exifData
+                                    
+                                    // Call callback if provided
+                                    if (callback && typeof callback === "function") {
+                                        callback(false, country, city)  // false = from API
+                                    }
+                                } else {
+                                    console.log("🌍 Reverse geocoding update skipped - coordinates changed during processing")
+                                    if (callback && typeof callback === "function") {
+                                        callback(false, "", "")  // Coordinates changed
+                                    }
+                                }
+                            } else {
+                                console.log("🌍 Reverse geocoding: no address in response")
+                            }
+                            cleanup()
+                        } catch (e) {
+                            console.warn("❌ Error in reverse geocoding callback:", e, e.stack)
+                            cleanup()
+                        }
+                    } else {
+                        console.warn("❌ Reverse geocoding failed with status:", xhr.status)
+                        cleanup()
+                    }
+                }
+            }
+            
+            xhr.onerror = function() {
+                console.warn("❌ Reverse geocoding network error")
+                cleanup()
+            }
+            
+            // Set timeout to avoid blocking
+            xhr.timeout = 5000
+            xhr.ontimeout = function() {
+                console.warn("❌ Reverse geocoding timeout")
+                cleanup()
+            }
+            
+            xhr.send()
         }
         
         function loadImageWithAuth(imageUrl, skipAnimation) {
@@ -1013,7 +1596,8 @@ WallpaperItem {
             } catch (e) {
                 // If decoding fails, use as-is
             }
-            currentExifData.fileName = fileName
+            // Set filename in separate property for reliable QML binding
+            currentFileName = fileName
             
             // Check cache first
             var cachedDataUrl = getCachedDataUrl(imageUrl)
@@ -1024,7 +1608,7 @@ WallpaperItem {
                 createImageComponent(cachedDataUrl, imageUrl, skipAnimation, currentExifData.orientation)
                 
                 // Update OSD if EXIF info is enabled and we have filename or EXIF data
-                if (root.configuration.ShowExifInfo && (currentExifData.fileName !== "" || currentExifData.hasData)) {
+                if (root.configuration.ShowExifInfo && (currentFileName !== "" || currentExifData.hasData)) {
                     exifOsd.opacity = 1.0
                     if (root.configuration.ExifInfoDuration > 0) {
                         exifHideTimer.restart()
@@ -1083,42 +1667,105 @@ WallpaperItem {
                         } catch (e) {
                             // If decoding fails, use as-is
                         }
-                        currentExifData.fileName = fileName
+                        // Set filename in separate property for reliable QML binding
+                        currentFileName = fileName
+                        
+                        // Detect MIME type from magic bytes (more reliable than file extension)
+                        // Some files have wrong extensions (e.g., .png files that are actually JPEG)
+                        var mimeType = "image/jpeg"  // Default
+                        var bytes = new Uint8Array(xhr.response)
+                        if (bytes.length >= 4) {
+                            // Check magic bytes to determine actual file type
+                            if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+                                // JPEG: starts with 0xFFD8FF
+                                mimeType = "image/jpeg"
+                            } else if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+                                // PNG: starts with 0x89504E47 (PNG signature)
+                                mimeType = "image/png"
+                            } else if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+                                // GIF: starts with GIF
+                                mimeType = "image/gif"
+                            } else if ((bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2A && bytes[3] === 0x00) ||
+                                       (bytes[0] === 0x4D && bytes[1] === 0x4D && bytes[2] === 0x00 && bytes[3] === 0x2A)) {
+                                // TIFF: Intel (0x49492A00) or Motorola (0x4D4D002A)
+                                mimeType = "image/tiff"
+                            } else if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && 
+                                       bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && 
+                                       bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+                                // WebP: starts with RIFF...WEBP
+                                mimeType = "image/webp"
+                            } else {
+                                // Fallback to extension-based detection if magic bytes don't match
+                                if (cleanUrl.toLowerCase().indexOf(".png") !== -1) {
+                                    mimeType = "image/png"
+                                } else if (cleanUrl.toLowerCase().indexOf(".gif") !== -1) {
+                                    mimeType = "image/gif"
+                                } else if (cleanUrl.toLowerCase().indexOf(".webp") !== -1) {
+                                    mimeType = "image/webp"
+                                } else if (cleanUrl.toLowerCase().indexOf(".tif") !== -1) {
+                                    mimeType = "image/tiff"
+                                } else if (cleanUrl.toLowerCase().indexOf(".svg") !== -1) {
+                                    mimeType = "image/svg+xml"
+                                }
+                            }
+                        }
                         
                         // Read EXIF orientation before converting to base64
                         var orientation = 0
-                        var mimeType = "image/jpeg"
-                        if (cleanUrl.toLowerCase().indexOf(".png") !== -1) {
-                            mimeType = "image/png"
-                        } else if (cleanUrl.toLowerCase().indexOf(".gif") !== -1) {
-                            mimeType = "image/gif"
-                        } else if (cleanUrl.toLowerCase().indexOf(".webp") !== -1) {
-                            mimeType = "image/webp"
-                        } else if (cleanUrl.toLowerCase().indexOf(".tif") !== -1) {
-                            mimeType = "image/tiff"
-                        } else if (cleanUrl.toLowerCase().indexOf(".svg") !== -1) {
-                            mimeType = "image/svg+xml"
-                        }
                         
                         // Read EXIF data for JPEG, TIFF, and WebP images
                         // EXIF is supported in JPEG (standard), TIFF (native), and WebP (can contain EXIF)
-                        if (mimeType === "image/jpeg" || mimeType === "image/tiff" || 
-                            cleanUrl.toLowerCase().indexOf(".tif") !== -1 || 
-                            mimeType === "image/webp") {
+                        // Use magic bytes detection to ensure we read EXIF even if file extension is wrong
+                        if (mimeType === "image/jpeg" || mimeType === "image/tiff" || mimeType === "image/webp") {
                             orientation = readExifOrientation(xhr.response)
                             readExifTags(xhr.response)  // Read additional EXIF tags
+                            
+                            // Force update of currentExifData to trigger QML bindings
+                            // QML doesn't always detect changes to nested object properties
+                            var exifData = currentExifData
+                            currentExifData = exifData
                             
                             // Ensure hasData is set if orientation was found
                             // This is important because readExifTags might not set hasData
                             // if it doesn't find the specific tags it's looking for
                             if (orientation !== 0 && !currentExifData.hasData) {
-                                currentExifData.hasData = true
+                                var exifData2 = currentExifData
+                                exifData2.hasData = true
+                                currentExifData = exifData2
                             }
                             
-                            // Only log EXIF data if orientation correction is needed (non-zero)
+                            // Log EXIF data found for debugging
                             if (orientation !== 0) {
                                 console.log("EXIF orientation detected, applying rotation:", orientation, "degrees")
                             }
+                            if (currentExifData.hasData) {
+                                console.log("📸 EXIF data found - Make:", currentExifData.make, "Model:", currentExifData.model, 
+                                          "ISO:", currentExifData.iso, "DateTime:", currentExifData.dateTime,
+                                          "FNumber:", currentExifData.fNumber, "ExposureTime:", currentExifData.exposureTime)
+                            }
+                            
+                            // Force a complete refresh of currentExifData to ensure QML bindings update
+                            // Create a completely new object to force QML to detect the change
+                            var finalExifData = {
+                                orientation: currentExifData.orientation,
+                                dateTime: currentExifData.dateTime,
+                                make: currentExifData.make,
+                                model: currentExifData.model,
+                                iso: currentExifData.iso,
+                                fNumber: currentExifData.fNumber,
+                                exposureTime: currentExifData.exposureTime,
+                                latitude: currentExifData.latitude,
+                                longitude: currentExifData.longitude,
+                                latitudeRef: currentExifData.latitudeRef,
+                                longitudeRef: currentExifData.longitudeRef,
+                                country: currentExifData.country,
+                                city: currentExifData.city,
+                                hasData: currentExifData.hasData
+                            }
+                            currentExifData = finalExifData
+                            console.log("🔄 Forced EXIF data refresh - Make:", finalExifData.make, "Model:", finalExifData.model, 
+                                      "ISO:", finalExifData.iso, "FNumber:", finalExifData.fNumber, "ExposureTime:", finalExifData.exposureTime,
+                                      "GPS:", finalExifData.latitude, finalExifData.longitude, "Location:", finalExifData.city, finalExifData.country)
                         }
                         
                         // Convert arraybuffer to base64 data URL
@@ -1137,12 +1784,61 @@ WallpaperItem {
                         } else {
                             console.warn("⚠️  Invalid data URL, skipping cache")
                         }
-                        
+
                         // Create image component with data URL
+                        // Note: Reverse geocoding is asynchronous and will update location when it arrives
+                        // If location is in cache, it will be available immediately
                         createImageComponent(dataUrl, imageUrl, skipAnimation, orientation)
                         
+                        // Start reverse geocoding if we have GPS coordinates
+                        // This is asynchronous - location will appear in OSD when response arrives
+                        var hasGPS = currentExifData.latitude !== 0 && currentExifData.longitude !== 0
+                        if (hasGPS) {
+                            var geocodeStartTime = Date.now()
+                            console.log("🌍 Starting reverse geocoding for coordinates:", currentExifData.latitude, currentExifData.longitude)
+                            
+                            // Start reverse geocoding (will use cache if available, otherwise async API call)
+                            reverseGeocode(currentExifData.latitude, currentExifData.longitude, function(fromCache, country, city) {
+                                var duration = Date.now() - geocodeStartTime
+                                console.log("🌍 Reverse geocoding completed in", duration, "ms (cached:", fromCache, ")")
+                                // Location is already updated in currentExifData by reverseGeocode function
+                                // OSD will automatically update via QML bindings
+                            })
+                        }
+                        
                         // Update OSD if EXIF info is enabled and we have filename or EXIF data
-                        if (root.configuration.ShowExifInfo && (currentExifData.fileName !== "" || currentExifData.hasData)) {
+                        if (root.configuration.ShowExifInfo && (currentFileName !== "" || currentExifData.hasData)) {
+                            // Log what we're about to display
+                            console.log("🖼️  Showing OSD - Make:", currentExifData.make, "Model:", currentExifData.model, 
+                                      "ISO:", currentExifData.iso, "FNumber:", currentExifData.fNumber, 
+                                      "ExposureTime:", currentExifData.exposureTime, "DateTime:", currentExifData.dateTime,
+                                      "GPS:", currentExifData.latitude, currentExifData.longitude)
+                            
+                            // Force a final refresh of currentExifData to ensure QML bindings update
+                            Qt.callLater(function() {
+                                var finalExifData = {
+                                    orientation: currentExifData.orientation,
+                                    dateTime: currentExifData.dateTime,
+                                    make: currentExifData.make,
+                                    model: currentExifData.model,
+                                    iso: currentExifData.iso,
+                                    fNumber: currentExifData.fNumber,
+                                    exposureTime: currentExifData.exposureTime,
+                                    latitude: currentExifData.latitude,
+                                    longitude: currentExifData.longitude,
+                                    latitudeRef: currentExifData.latitudeRef,
+                                    longitudeRef: currentExifData.longitudeRef,
+                                    country: currentExifData.country,
+                                    city: currentExifData.city,
+                                    hasData: currentExifData.hasData
+                                }
+                                currentExifData = finalExifData
+                                console.log("🔄 Final OSD refresh - Make:", finalExifData.make, "Model:", finalExifData.model, 
+                                          "ISO:", finalExifData.iso, "FNumber:", finalExifData.fNumber, 
+                                          "ExposureTime:", finalExifData.exposureTime, "GPS:", finalExifData.latitude, finalExifData.longitude,
+                                          "Location:", finalExifData.city, finalExifData.country)
+                            })
+                            
                             exifOsd.opacity = 1.0
                             if (root.configuration.ExifInfoDuration > 0) {
                                 exifHideTimer.restart()
@@ -1265,6 +1961,53 @@ WallpaperItem {
         repeat: false
         onTriggered: {
             carouselController.loadPhotos()
+        }
+    }
+    
+    // Periodic cache cleanup timer (every 30 minutes)
+    // Prevents cache from growing indefinitely and helps with memory management
+    Timer {
+        id: cacheCleanupTimer
+        interval: 30 * 60 * 1000  // 30 minutes
+        running: true
+        repeat: true
+        onTriggered: {
+            var cacheKeys = Object.keys(carouselController.geocodeCache)
+            var now = Date.now()
+            var maxAge = 24 * 60 * 60 * 1000  // 24 hours TTL
+            var cleaned = 0
+            
+            for (var i = 0; i < cacheKeys.length; i++) {
+                var key = cacheKeys[i]
+                var entry = carouselController.geocodeCache[key]
+                if (entry && entry.timestamp) {
+                    var age = now - entry.timestamp
+                    if (age > maxAge) {
+                        delete carouselController.geocodeCache[key]
+                        cleaned++
+                    }
+                }
+            }
+            
+            if (cleaned > 0) {
+                console.log("🌍 Periodic cache cleanup: removed", cleaned, "expired entries")
+            }
+            
+            // Also enforce size limit
+            var remainingKeys = Object.keys(carouselController.geocodeCache)
+            if (remainingKeys.length > carouselController.maxGeocodeCacheSize) {
+                var sortedKeys = remainingKeys.sort(function(a, b) {
+                    var timeA = carouselController.geocodeCache[a].timestamp || 0
+                    var timeB = carouselController.geocodeCache[b].timestamp || 0
+                    return timeA - timeB
+                })
+                
+                var toRemove = sortedKeys.slice(0, sortedKeys.length - carouselController.maxGeocodeCacheSize)
+                for (var j = 0; j < toRemove.length; j++) {
+                    delete carouselController.geocodeCache[toRemove[j]]
+                }
+                console.log("🌍 Periodic cache cleanup: enforced size limit, removed", toRemove.length, "entries")
+            }
         }
     }
 
@@ -1494,7 +2237,8 @@ WallpaperItem {
                      carouselController.currentExifData.iso > 0 ||
                      carouselController.currentExifData.fNumber > 0 ||
                      carouselController.currentExifData.exposureTime !== "" ||
-                     carouselController.currentExifData.fileName !== "") && 
+                     (carouselController.currentExifData.latitude !== 0 && carouselController.currentExifData.longitude !== 0) ||
+                     carouselController.currentFileName !== "") && 
                     opacity > 0
             opacity: 0
             color: Qt.rgba(0, 0, 0, 0.75)  // Semi-transparent black background
@@ -1530,10 +2274,12 @@ WallpaperItem {
                     color: "white"
                 }
                 
-                // Filename
+                // Filename - Always show if available
                 Text {
-                    visible: carouselController.currentExifData.fileName !== ""
-                    text: i18n("File: %1", carouselController.currentExifData.fileName)
+                    id: fileNameText
+                    visible: carouselController.currentFileName !== ""
+                    text: carouselController.currentFileName !== "" ? 
+                          i18n("File: %1", carouselController.currentFileName) : ""
                     font {
                         bold: true
                         pixelSize: Kirigami.Theme.defaultFont.pixelSize * 0.95
@@ -1591,6 +2337,63 @@ WallpaperItem {
                     text: i18n("Exposure: %1", carouselController.currentExifData.exposureTime)
                     font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
                     color: "white"
+                }
+                
+                // GPS Coordinates and Location
+                Text {
+                    visible: carouselController.currentExifData.latitude !== 0 && carouselController.currentExifData.longitude !== 0
+                    text: {
+                        var lat = carouselController.currentExifData.latitude
+                        var lon = carouselController.currentExifData.longitude
+                        var latRef = carouselController.currentExifData.latitudeRef
+                        var lonRef = carouselController.currentExifData.longitudeRef
+                        var country = carouselController.currentExifData.country
+                        var city = carouselController.currentExifData.city
+                        
+                        // Format: "37.5665° N, 126.9780° E" or "37.5665, 126.9780"
+                        var latStr = Math.abs(lat).toFixed(4) + "°"
+                        if (latRef !== "") latStr += " " + latRef
+                        var lonStr = Math.abs(lon).toFixed(4) + "°"
+                        if (lonRef !== "") lonStr += " " + lonRef
+                        
+                        // If we have country/city, show them, otherwise show coordinates
+                        if (country !== "" || city !== "") {
+                            var location = ""
+                            if (city !== "") {
+                                location = city
+                                if (country !== "") location += ", " + country
+                            } else if (country !== "") {
+                                location = country
+                            }
+                            return i18n("Location: %1", location)
+                        } else {
+                            return i18n("Coordinates: %1, %2", latStr, lonStr)
+                        }
+                    }
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+                    color: "white"
+                }
+                
+                // GPS Coordinates (detailed) - show if location name is available
+                Text {
+                    visible: (carouselController.currentExifData.latitude !== 0 && carouselController.currentExifData.longitude !== 0) && 
+                             (carouselController.currentExifData.country !== "" || carouselController.currentExifData.city !== "")
+                    text: {
+                        var lat = carouselController.currentExifData.latitude
+                        var lon = carouselController.currentExifData.longitude
+                        var latRef = carouselController.currentExifData.latitudeRef
+                        var lonRef = carouselController.currentExifData.longitudeRef
+                        
+                        var latStr = Math.abs(lat).toFixed(4) + "°"
+                        if (latRef !== "") latStr += " " + latRef
+                        var lonStr = Math.abs(lon).toFixed(4) + "°"
+                        if (lonRef !== "") lonStr += " " + lonRef
+                        
+                        return i18n("Coordinates: %1, %2", latStr, lonStr)
+                    }
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 0.9
+                    color: "white"
+                    opacity: 0.8
                 }
                 
                 // Orientation
@@ -1663,7 +2466,8 @@ WallpaperItem {
                                  carouselController.currentExifData.iso > 0 ||
                                  carouselController.currentExifData.fNumber > 0 ||
                                  carouselController.currentExifData.exposureTime !== "" ||
-                                 carouselController.currentExifData.fileName !== ""
+                                 (carouselController.currentExifData.latitude !== 0 && carouselController.currentExifData.longitude !== 0) ||
+                                 carouselController.currentFileName !== ""
                 
                 if (hasAnyData) {
                     // Ensure hasData is set correctly
