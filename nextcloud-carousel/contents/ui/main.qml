@@ -2608,6 +2608,83 @@ WallpaperItem {
             
         }
         
+        // Location OSD (Permanent overlay with script font)
+        Text {
+            id: locationOsd
+            // Calculate position based on configuration
+            // Use root.width/height instead of parent to ensure values are available
+            x: {
+                var pos = root.configuration.LocationOsdPosition || 1
+                var offset = root.configuration.LocationOsdXOffset || 20
+                if (pos === 0 || pos === 2) return offset  // Left
+                if (pos === 1 || pos === 3) return root.width - width - offset  // Right
+                if (pos === 4 || pos === 5) return (root.width - width) / 2 + offset  // Center (with offset)
+                return offset
+            }
+            y: {
+                var pos = root.configuration.LocationOsdPosition || 1
+                var offset = root.configuration.LocationOsdYOffset || 20
+                if (pos === 0 || pos === 1 || pos === 4) return offset  // Top
+                if (pos === 2 || pos === 3 || pos === 5) return root.height - height - offset  // Bottom
+                return offset
+            }
+            
+            // Debug: log visibility state
+            onVisibleChanged: {
+                console.log("📍 Location OSD visible changed:", visible, "text:", text, "ShowLocationOsd:", root.configuration.ShowLocationOsd)
+            }
+            
+            // Show only when enabled and location is available
+            // Show if we have GPS coordinates and either country or city
+            visible: {
+                if (!root.configuration.ShowLocationOsd) return false
+                var hasGPS = carouselController.currentExifData.latitude !== 0 && 
+                            carouselController.currentExifData.longitude !== 0
+                if (!hasGPS) return false
+                var hasLocation = (carouselController.currentExifData.country !== "" || 
+                                  carouselController.currentExifData.city !== "")
+                return hasLocation
+            }
+            
+            // Location text
+            text: {
+                var country = carouselController.currentExifData.country || ""
+                var city = carouselController.currentExifData.city || ""
+                var location = ""
+                if (city !== "") {
+                    location = city
+                    if (country !== "") location += ", " + country
+                } else if (country !== "") {
+                    location = country
+                }
+                // Debug: log when text changes
+                if (location !== "") {
+                    console.log("📍 Location OSD text:", location)
+                }
+                return location
+            }
+            
+            // Font styling with user-selectable font family
+            font {
+                pixelSize: root.configuration.LocationOsdFontSize || 24
+                italic: true
+                weight: Font.Light
+                family: {
+                    var fontFamily = root.configuration.LocationOsdFontFamily || ""
+                    if (fontFamily === "" || fontFamily === "System Default") {
+                        return Qt.application.font.family
+                    }
+                    return fontFamily
+                }
+            }
+            
+            // Styling with script font
+            color: "white"
+            style: Text.Outline
+            styleColor: Qt.rgba(0, 0, 0, 0.8)  // Dark outline for better visibility
+            opacity: 0.95
+        }
+        
         // Loading indicator
         Kirigami.LoadingPlaceholder {
             anchors.centerIn: parent

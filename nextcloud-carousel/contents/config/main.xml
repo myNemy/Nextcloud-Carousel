@@ -84,6 +84,38 @@
       <min>0</min>
       <max>30</max>
     </entry>
+    <entry name="ShowLocationOsd" type="bool">
+      <label>Show permanent location overlay</label>
+      <default>false</default>
+    </entry>
+    <entry name="LocationOsdFontSize" type="int">
+      <label>Location OSD font size (pixels)</label>
+      <default>24</default>
+      <min>12</min>
+      <max>72</max>
+    </entry>
+    <entry name="LocationOsdPosition" type="int">
+      <label>Location OSD position: 0=Top-Left, 1=Top-Right, 2=Bottom-Left, 3=Bottom-Right, 4=Top-Center, 5=Bottom-Center</label>
+      <default>1</default>
+      <min>0</min>
+      <max>5</max>
+    </entry>
+    <entry name="LocationOsdXOffset" type="int">
+      <label>Location OSD horizontal offset (pixels)</label>
+      <default>20</default>
+      <min>-200</min>
+      <max>200</max>
+    </entry>
+    <entry name="LocationOsdYOffset" type="int">
+      <label>Location OSD vertical offset (pixels)</label>
+      <default>20</default>
+      <min>-200</min>
+      <max>200</max>
+    </entry>
+    <entry name="LocationOsdFontFamily" type="String">
+      <label>Location OSD font family</label>
+      <default></default>
+    </entry>
   </group>
 </kcfg>
 

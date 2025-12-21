@@ -30,6 +30,12 @@ Kirigami.FormLayout {
     property alias cfg_ShowLoadingIndicator: showLoadingIndicatorCheckBox.checked
     property alias cfg_ShowExifInfo: showExifInfoCheckBox.checked
     property alias cfg_ExifInfoDuration: exifInfoDurationField.text
+    property alias cfg_ShowLocationOsd: showLocationOsdCheckBox.checked
+    property alias cfg_LocationOsdFontSize: locationOsdFontSizeField.text
+    property alias cfg_LocationOsdPosition: locationOsdPositionComboBox.currentIndex
+    property alias cfg_LocationOsdXOffset: locationOsdXOffsetField.text
+    property alias cfg_LocationOsdYOffset: locationOsdYOffsetField.text
+    property alias cfg_LocationOsdFontFamily: locationOsdFontFamilyComboBox.currentText
     property alias formLayout: root
 
     QtControls2.TextField {
@@ -264,5 +270,106 @@ Kirigami.FormLayout {
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("How long to show EXIF information (0 = always visible, 1-30 = auto-hide after N seconds)")
+    }
+
+    QtControls2.CheckBox {
+        id: showLocationOsdCheckBox
+        Kirigami.FormData.label: i18n("Location Overlay:")
+        text: i18n("Show permanent location overlay")
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Display location (city, country) as a permanent overlay with script font")
+    }
+
+    QtControls2.TextField {
+        id: locationOsdFontSizeField
+        Kirigami.FormData.label: i18n("Location Font Size (px):")
+        placeholderText: i18n("24")
+        enabled: showLocationOsdCheckBox.checked
+        validator: IntValidator {
+            bottom: 12
+            top: 72
+        }
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Font size for the location overlay (12-72 pixels)")
+    }
+
+    QtControls2.ComboBox {
+        id: locationOsdPositionComboBox
+        Kirigami.FormData.label: i18n("Location Position:")
+        enabled: showLocationOsdCheckBox.checked
+        model: [
+            i18n("Top-Left"),
+            i18n("Top-Right"),
+            i18n("Bottom-Left"),
+            i18n("Bottom-Right"),
+            i18n("Top-Center"),
+            i18n("Bottom-Center")
+        ]
+        currentIndex: wallpaper.configuration.LocationOsdPosition || 1
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Position of the location overlay on the screen")
+    }
+
+    QtControls2.TextField {
+        id: locationOsdXOffsetField
+        Kirigami.FormData.label: i18n("Location X Offset (px):")
+        placeholderText: i18n("20")
+        enabled: showLocationOsdCheckBox.checked
+        validator: IntValidator {
+            bottom: -200
+            top: 200
+        }
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Horizontal offset from the selected position (-200 to 200 pixels)")
+    }
+
+    QtControls2.TextField {
+        id: locationOsdYOffsetField
+        Kirigami.FormData.label: i18n("Location Y Offset (px):")
+        placeholderText: i18n("20")
+        enabled: showLocationOsdCheckBox.checked
+        validator: IntValidator {
+            bottom: -200
+            top: 200
+        }
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Vertical offset from the selected position (-200 to 200 pixels)")
+    }
+
+    QtControls2.ComboBox {
+        id: locationOsdFontFamilyComboBox
+        Kirigami.FormData.label: i18n("Location Font Family:")
+        enabled: showLocationOsdCheckBox.checked
+        editable: true
+        
+        // Static list with common script fonts - user can type custom ones
+        model: [
+            "System Default",
+            "Dancing Script",
+            "Pacifico",
+            "Brush Script MT",
+            "Lucida Handwriting",
+            "Comic Sans MS",
+            "Kalam",
+            "Satisfy",
+            "Great Vibes",
+            "Allura",
+            "Lobster",
+            "Amatic SC",
+            "Nanum Brush Script",
+            "Nanum Pen Script"
+        ]
+        
+        // Simple initialization - default to System Default
+        currentIndex: 0
+        
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Select a script/cursive font for the location overlay. Choose 'System Default' to use the system font, or type a custom font name")
     }
 }
