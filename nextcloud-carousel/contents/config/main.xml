@@ -116,6 +116,13 @@
       <label>Location OSD font family</label>
       <default></default>
     </entry>
+    <entry name="MaxImageSizeMB" type="int">
+      <label>Maximum image size limit in MB (0 = auto-detect, 3-30 recommended)</label>
+      <default>0</default>
+      <min>0</min>
+      <max>50</max>
+      <whatsthis>Maximum size for images to be loaded. Images larger than this will be skipped to prevent memory issues. Set to 0 for automatic detection (default: 5MB). Recommended values: 3MB for low-end systems, 5-10MB for mid-range, 10-15MB for high-end systems (16GB+ RAM).</whatsthis>
+    </entry>
   </group>
 </kcfg>
 

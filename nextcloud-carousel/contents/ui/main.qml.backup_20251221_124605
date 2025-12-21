@@ -36,46 +36,8 @@ WallpaperItem {
         property int retryCount: 0  // Track retry attempts for PROPFIND
         property int retryDelay: 30  // Current retry delay in seconds (starts at 30s)
         property int maxRetries: 10  // Maximum retry attempts before giving up
-        property int maxImageSizeForDataUrl: 5 * 1024 * 1024  // Will be calculated dynamically based on available memory
+        property int maxImageSizeForDataUrl: 5 * 1024 * 1024  // 5MB limit for data URL conversion (prevents OOM)
         property var tempFilePaths: []  // Track temporary file paths for cleanup
-        
-        // Dynamic memory limit calculation
-        // Calculates safe image size limit based on estimated available memory
-        // Formula: (estimated_available_memory * safety_factor) / (memory_per_image_multiplier * concurrent_images)
-        // Memory per image multiplier: ~8.6x (ArrayBuffer + Base64 + DataURL + Decoded + Transitions)
-        // Concurrent images: 2-3 (during transitions)
-        // Safety factor: 0.1 (use only 10% of available memory for images)
-        function calculateDynamicImageLimit() {
-            // Default conservative values (for systems with unknown memory)
-            var defaultLimitMB = 5  // 5MB default (safe for most systems)
-            var minLimitMB = 3  // Minimum limit (3MB - safe even on low-end systems)
-            var maxLimitMB = 30  // Maximum limit (30MB - even high-end systems shouldn't need more)
-            
-            // Try to get configured memory limit from user settings
-            // If not configured, use conservative defaults
-            var configuredLimitMB = root.configuration.MaxImageSizeMB || 0
-            
-            if (configuredLimitMB > 0) {
-                // User has configured a limit, use it (but clamp to safe range)
-                var limitMB = Math.max(minLimitMB, Math.min(maxLimitMB, configuredLimitMB))
-                maxImageSizeForDataUrl = limitMB * 1024 * 1024
-                console.log("📊 Using configured image size limit:", limitMB, "MB")
-                return
-            }
-            
-            // Auto-calculation based on conservative estimates
-            // Since we can't read actual memory in QML, we use a conservative default
-            // Users can override via configuration if they have more/less memory
-            var estimatedLimitMB = defaultLimitMB
-            
-            // Log the calculated limit
-            maxImageSizeForDataUrl = estimatedLimitMB * 1024 * 1024
-            console.log("📊 Dynamic image size limit calculated:", estimatedLimitMB, "MB (default - configure MaxImageSizeMB for custom limit)")
-            console.log("💡 Tip: Set MaxImageSizeMB in configuration:")
-            console.log("   - 3-5MB for low-end systems (< 8GB RAM)")
-            console.log("   - 5-10MB for mid-range systems (8-16GB RAM)")
-            console.log("   - 10-15MB for high-end systems (> 16GB RAM)")
-        }
         
         // Calculate optimal cache size based on total number of photos in the list
         // Strategy: DISABLED to prevent memory leaks (OOM Killer issue)
@@ -86,14 +48,8 @@ WallpaperItem {
             // CRITICAL FIX: Disable cache completely to prevent memory leaks
             // This is a temporary fix until proper memory management is implemented
             maxCacheSize = 0
-            
-            // Calculate dynamic image size limit based on available memory
-            calculateDynamicImageLimit()
-            
-            var limitMB = (maxImageSizeForDataUrl / 1024 / 1024).toFixed(0)
             console.log("⚠️  Cache DISABLED to prevent memory leaks (OOM Killer fix)")
             console.log("📊 Cache configuration: caching disabled (0 data URLs) - images will be re-downloaded each time")
-            console.log("🛡️  Memory protection: Images > " + limitMB + "MB will be skipped to prevent OOM crashes")
             
             // Clear any existing cache immediately
             clearDataUrlCache()
@@ -431,17 +387,11 @@ WallpaperItem {
             // This is essential to prevent OOM crashes with large images
             clearDataUrlCache()
             
-            // Force immediate cleanup with delay to allow GC
-            Qt.callLater(function() {
-                // Give GC a chance to run
-                clearDataUrlCache()
-            })
-            
             // Periodic deep cleanup every 5 images
             if (imageSwitchCount >= 5) {
                 imageSwitchCount = 0
                 
-                // Force StackView cleanup with multiple passes
+                // Force StackView cleanup
                 Qt.callLater(function() {
                     // Check StackView depth
                     if (imageStack.depth > 2) {
@@ -456,11 +406,6 @@ WallpaperItem {
                             console.warn("⚠️  StackView depth:", currentDepth, "- possible memory leak, consider restarting plasmashell")
                         }
                     }
-                    
-                    // Second cleanup pass after delay
-                    Qt.callLater(function() {
-                        clearDataUrlCache()
-                    })
                 })
             }
             
@@ -2033,21 +1978,13 @@ WallpaperItem {
                         // (new Uint8Array(uint8Array) copies), which can spike memory and trigger OOM.
                         var base64 = arrayBufferToBase64(xhr.response)
                         
-                        // CRITICAL: Clear ArrayBuffer reference immediately after conversion
-                        // This helps the GC release the original buffer sooner
-                        var tempResponse = xhr.response
-                        xhr = null  // Release XHR reference
-                        
                         var dataUrl = "data:" + mimeType + ";base64," + base64
                         // Removed verbose logging of data URL to prevent log bloat (syslog/journal growth)
                         // Data URLs are very large (hundreds of KB to MB) and should not be logged
                         
                         // CRITICAL: Clear base64 string from memory immediately after creating data URL
                         // This helps prevent memory accumulation
-                        // Use multiple assignments to force GC hint
-                        base64 = ""
                         base64 = null
-                        tempResponse = null
                         
                         // Cache data URL for future use (if not too large and cache is enabled)
                         // Note: Cache is currently disabled (maxCacheSize = 0) to prevent memory leaks
@@ -2061,17 +1998,9 @@ WallpaperItem {
                         createImageComponent(dataUrl, imageUrl, skipAnimation, orientation)
                         
                         // CRITICAL: Force immediate cleanup of data URL after use to free memory
-                        // Use multiple delayed cleanups to force GC and memory release
-                        var tempDataUrl = dataUrl
+                        // Use Qt.callLater to ensure image component is created first
                         Qt.callLater(function() {
-                            // First cleanup: clear reference
-                            tempDataUrl = ""
-                            tempDataUrl = null
-                            // Second cleanup after short delay to allow GC
-                            Qt.callLater(function() {
-                                dataUrl = ""
-                                dataUrl = null
-                            })
+                            dataUrl = null
                         })
                         
                         // Start reverse geocoding if we have GPS coordinates
@@ -2176,20 +2105,6 @@ WallpaperItem {
         // Create image component with data URL (extracted for reuse)
         function createImageComponent(dataUrl, imageUrl, skipAnimation, orientation) {
             // Removed data URL length logging to prevent log bloat
-            
-            // CRITICAL: Validate data URL size before creating component
-            // This prevents memory exhaustion from extremely large data URLs
-            if (dataUrl && dataUrl.length > carouselController.maxImageSizeForDataUrl * 1.4) {
-                // Data URL is ~1.3x larger than original (base64 encoding)
-                // If it exceeds our limit, skip it
-                console.error("⚠️  Data URL too large:", (dataUrl.length / 1024 / 1024).toFixed(2), "MB - skipping to prevent OOM")
-                root.loading = false
-                if (photoList.length > 1) {
-                    console.log("Skipping oversized data URL, trying next image...")
-                    carouselTimer.restart()
-                }
-                return
-            }
             
             // Use StackView pattern (following KDE official implementation)
             // Clean up any existing pending image
@@ -2507,7 +2422,6 @@ WallpaperItem {
                 
                 // CRITICAL: Force aggressive cleanup of old StackView items after transition
                 // This ensures old images are properly destroyed and memory is released immediately
-                // Use multiple delayed cleanups to give GC time to work
                 Qt.callLater(function() {
                     // StackView should only have 1-2 items (current + maybe one in transition)
                     var currentDepth = imageStack.depth
@@ -2517,15 +2431,6 @@ WallpaperItem {
                         console.warn("⚠️  StackView depth still high after cleanup:", currentDepth, "- possible memory leak")
                         console.warn("⚠️  Consider restarting plasmashell if memory usage is high")
                     }
-                    
-                    // Second cleanup after transition completes (give time for GC)
-                    // This helps release memory from completed transitions
-                    Qt.callLater(function() {
-                        // Force cleanup of any remaining references
-                        if (tempPending) {
-                            tempPending = null
-                        }
-                    })
                 })
                 
                 // Verify the item is actually in the StackView (only log errors)
