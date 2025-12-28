@@ -2005,7 +2005,15 @@ WallpaperItem {
             if (nextcloudDownloaderAvailable && nextcloudDownloader) {
                 console.log("✅✅✅ Using C++ NextcloudDownloader for download")
                 try {
-                    var localFilePath = nextcloudDownloader.downloadImage(cleanUrl, username, password)
+                    // Calculate max size limit (same as QML fallback)
+                    var configuredLimitMB = root.configuration.MaxImageSizeMB || 0
+                    var maxSizeMB = 30  // Default 30MB if not configured
+                    if (configuredLimitMB > 0) {
+                        maxSizeMB = Math.max(3, Math.min(30, configuredLimitMB))  // Clamp to 3-30MB range
+                    } else {
+                        maxSizeMB = 3  // Auto: use conservative 3MB default (same as QML)
+                    }
+                    var localFilePath = nextcloudDownloader.downloadImage(cleanUrl, username, password, maxSizeMB)
                     if (localFilePath && localFilePath.length > 0) {
                         // NextcloudDownloader returned a local file path (cached or ready), use it immediately
                         root.currentImageMethod = "C++"  // Track method used
@@ -2560,7 +2568,20 @@ WallpaperItem {
                         
                         // If GPS coordinates are available, trigger reverse geocoding (same as QML)
                         if (exifData.latitude !== 0 && exifData.longitude !== 0) {
+                            // Generate unique image ID from filename and coordinates to prevent location updates for wrong image
+                            // Same logic as QML fallback to ensure consistency
+                            var imageId = currentFileName + "_" + exifData.latitude.toFixed(6) + "_" + exifData.longitude.toFixed(6)
+                            currentImageId = imageId  // Store current image ID
+                            
+                            var geocodeStartTime = Date.now()
+                            console.log("🌍 Starting reverse geocoding (C++) for coordinates:", exifData.latitude, exifData.longitude, "image ID:", imageId)
+                            
+                            // Start reverse geocoding (will use cache if available, otherwise async API call)
+                            // Pass imageId to ensure location only updates for the correct image (same as QML)
                             reverseGeocode(exifData.latitude, exifData.longitude, function(fromCache, country, city) {
+                                var duration = Date.now() - geocodeStartTime
+                                console.log("🌍 Reverse geocoding completed (C++) in", duration, "ms (cached:", fromCache, ")")
+                                
                                 var exifDataUpdate = currentExifData
                                 exifDataUpdate.country = country || ""
                                 exifDataUpdate.city = city || ""
@@ -2573,7 +2594,10 @@ WallpaperItem {
                                         exifHideTimer.restart()
                                     }
                                 }
-                            })
+                            }, imageId)  // Pass imageId to ensure location only updates for correct image
+                        } else {
+                            // Reset image ID when no GPS data
+                            currentImageId = ""
                         }
                     } else {
                         console.log("ℹ️  No EXIF data found (normal orientation)")

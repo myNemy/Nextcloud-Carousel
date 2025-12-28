@@ -38,11 +38,13 @@ public:
      * @param url URL dell'immagine su Nextcloud
      * @param username Username per autenticazione
      * @param password Password per autenticazione
+     * @param maxSizeMB Dimensione massima in MB (0 = nessun limite, default 30MB)
      * @return Percorso del file locale se già in cache, stringa vuota se download in corso
      */
     Q_INVOKABLE QString downloadImage(const QString &url, 
                                       const QString &username, 
-                                      const QString &password);
+                                      const QString &password,
+                                      int maxSizeMB = 30);
 
     /**
      * Pulisce la cache dei file temporanei
@@ -101,6 +103,7 @@ private:
     QNetworkAccessManager *m_networkManager;
     QHash<QString, QString> m_cache;  // URL -> temp file path
     QHash<QNetworkReply*, QString> m_downloads;  // Reply -> URL
+    QHash<QNetworkReply*, int> m_downloadMaxSizes;  // Reply -> maxSizeMB
     QMutex m_mutex;
     QString m_tempDir;
 

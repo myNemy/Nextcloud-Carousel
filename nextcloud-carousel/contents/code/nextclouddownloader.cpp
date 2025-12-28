@@ -48,6 +48,7 @@ NextcloudDownloader::~NextcloudDownloader()
             }
         }
         m_downloads.clear();
+        m_downloadMaxSizes.clear();
     }
     
     // Cleanup temp files
@@ -56,7 +57,8 @@ NextcloudDownloader::~NextcloudDownloader()
 
 QString NextcloudDownloader::downloadImage(const QString &url, 
                                            const QString &username, 
-                                           const QString &password)
+                                           const QString &password,
+                                           int maxSizeMB)
 {
     QString cacheKey = getCacheKey(url);
     
@@ -107,6 +109,7 @@ QString NextcloudDownloader::downloadImage(const QString &url,
     {
         QMutexLocker locker(&m_mutex);
         m_downloads[reply] = url;  // Store original URL, not cacheKey
+        m_downloadMaxSizes[reply] = maxSizeMB;  // Store max size limit for this download
     }
     
     qDebug() << "⏳ NextcloudDownloader: Starting download for" << url;
@@ -118,6 +121,7 @@ void NextcloudDownloader::downloadFinished(QNetworkReply *reply)
 {
     // Protect access to m_downloads with mutex (thread safety)
     QString originalUrl;
+    int maxSizeMB = 30;  // Default if not found
     {
         QMutexLocker locker(&m_mutex);
         if (!m_downloads.contains(reply)) {
@@ -126,6 +130,8 @@ void NextcloudDownloader::downloadFinished(QNetworkReply *reply)
             return;
         }
         originalUrl = m_downloads.take(reply);
+        maxSizeMB = m_downloadMaxSizes.value(reply, 30);  // Get max size limit (default 30MB)
+        m_downloadMaxSizes.remove(reply);  // Remove from tracking
     }
     
     if (reply->error() != QNetworkReply::NoError) {
@@ -138,6 +144,18 @@ void NextcloudDownloader::downloadFinished(QNetworkReply *reply)
     
     // Read data and headers BEFORE deleteLater() (reply will be deleted)
     QByteArray data = reply->readAll();
+    
+    // Check image size limit (same as QML MaxImageSizeMB check)
+    // Default: 30MB if not specified, but QML will pass the configured limit
+    qint64 maxSizeBytes = (maxSizeMB > 0) ? (static_cast<qint64>(maxSizeMB) * 1024 * 1024) : (30 * 1024 * 1024);
+    if (data.size() > maxSizeBytes) {
+        qWarning() << "⚠️  NextcloudDownloader: Image too large (" << (data.size() / 1024 / 1024) 
+                   << "MB) for" << originalUrl << "- skipping (limit:" << maxSizeMB << "MB)";
+        emit downloadFailed(originalUrl, QString("Image too large (%1 MB, max %2 MB)").arg(data.size() / 1024 / 1024).arg(maxSizeMB));
+        reply->deleteLater();
+        return;
+    }
+    
     QString extension = "jpg";
     QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
     if (contentType.contains("png")) extension = "png";
