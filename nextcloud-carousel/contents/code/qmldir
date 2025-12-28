@@ -1,0 +1,4 @@
+module org.nextcloud.carousel
+plugin nextcloudimageprovider
+classname ImageProviderPlugin
+

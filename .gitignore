@@ -1,6 +1,8 @@
 # Build directories
 build/
+.build_temp/
 .cmake/
+.test_build/
 
 # IDE files
 .idea/

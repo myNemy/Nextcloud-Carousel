@@ -37,23 +37,35 @@ Kirigami.FormLayout {
     property alias cfg_LocationOsdYOffset: locationOsdYOffsetField.text
     property alias cfg_LocationOsdFontFamily: locationOsdFontFamilyComboBox.currentText
     property alias cfg_MaxImageSizeMB: maxImageSizeMBField.text
+    property alias cfg_ShowMethodIndicator: showMethodIndicatorCheckBox.checked
+    property alias cfg_MethodIndicatorDuration: methodIndicatorDurationField.text
     property alias formLayout: root
+
+    // Proprietà per sezioni collassabili
+    property bool sectionNextcloudExpanded: true
+    property bool sectionSlideshowExpanded: true
+    property bool sectionTransitionsExpanded: true
+    property bool sectionVisualizationExpanded: true
+    property bool sectionOverlayExpanded: true
 
     // ============================================
     // SEZIONE 1: CONNESSIONE NEXTCLOUD
     // ============================================
     
-    QtControls2.Label {
+    QtControls2.CheckBox {
         Kirigami.FormData.isSection: true
         text: i18n("Connessione Nextcloud")
+        checked: sectionNextcloudExpanded
         font.bold: true
         font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
+        onCheckedChanged: sectionNextcloudExpanded = checked
     }
 
     QtControls2.TextField {
         id: nextcloudUrlField
         Kirigami.FormData.label: i18n("Nextcloud URL:")
         placeholderText: i18n("https://nextcloud.example.com")
+        visible: sectionNextcloudExpanded
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("URL del server Nextcloud (es. https://nextcloud.example.com)\n\nFormato: https://dominio.com (senza barra finale)\nDeve essere accessibile dal tuo computer")
@@ -63,6 +75,7 @@ Kirigami.FormLayout {
         id: usernameField
         Kirigami.FormData.label: i18n("Username:")
         placeholderText: i18n("Il tuo username Nextcloud")
+        visible: sectionNextcloudExpanded
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Il tuo username Nextcloud per l'autenticazione\n\nDeve corrispondere esattamente al nome utente usato per accedere a Nextcloud")
@@ -73,6 +86,7 @@ Kirigami.FormLayout {
         Kirigami.FormData.label: i18n("Password:")
         placeholderText: i18n("Password o app password")
         echoMode: QtControls2.TextField.Password
+        visible: sectionNextcloudExpanded
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Password Nextcloud o app password (consigliato per sicurezza)\n\nApp password: Nextcloud → Impostazioni → Sicurezza → App passwords\nLe app password possono essere revocate individualmente e sono più sicure")
@@ -82,6 +96,7 @@ Kirigami.FormLayout {
         id: photoPathField
         Kirigami.FormData.label: i18n("Percorso Foto:")
         placeholderText: i18n("/Photos")
+        visible: sectionNextcloudExpanded
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Percorso alla cartella foto su Nextcloud (cerca anche nelle sottocartelle)\n\nEsempi: /Photos, /Pictures/Vacation, /Media/Images\nDeve iniziare con / e corrispondere al percorso esatto in Nextcloud")
@@ -91,6 +106,7 @@ Kirigami.FormLayout {
         id: maxImageSizeMBField
         Kirigami.FormData.label: i18n("Limite Dimensione Immagini (MB):")
         placeholderText: i18n("0")
+        visible: sectionNextcloudExpanded
         validator: IntValidator {
             bottom: 0
             top: 50
@@ -108,17 +124,20 @@ Kirigami.FormLayout {
     // SEZIONE 2: IMPOSTAZIONI SLIDESHOW
     // ============================================
     
-    QtControls2.Label {
+    QtControls2.CheckBox {
         Kirigami.FormData.isSection: true
         text: i18n("Impostazioni Slideshow")
+        checked: sectionSlideshowExpanded
         font.bold: true
         font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
+        onCheckedChanged: sectionSlideshowExpanded = checked
     }
 
     QtControls2.TextField {
         id: slideIntervalField
         Kirigami.FormData.label: i18n("Intervallo Slide (secondi):")
         placeholderText: i18n("10")
+        visible: sectionSlideshowExpanded
         validator: IntValidator {
             bottom: 1
             top: 3600
@@ -131,6 +150,7 @@ Kirigami.FormLayout {
     QtControls2.ComboBox {
         id: randomOrderComboBox
         Kirigami.FormData.label: i18n("Modalità Ordine:")
+        visible: sectionSlideshowExpanded
         model: [
             i18n("Sequenziale"),
             i18n("Casuale (ogni volta)"),
@@ -151,17 +171,20 @@ Kirigami.FormLayout {
     // SEZIONE 3: TRANSIZIONI
     // ============================================
     
-    QtControls2.Label {
+    QtControls2.CheckBox {
         Kirigami.FormData.isSection: true
         text: i18n("Transizioni tra Immagini")
+        checked: sectionTransitionsExpanded
         font.bold: true
         font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
+        onCheckedChanged: sectionTransitionsExpanded = checked
     }
 
     QtControls2.CheckBox {
         id: transitionEnabledCheckBox
         Kirigami.FormData.label: i18n("Transizioni:")
         text: i18n("Abilita transizioni tra immagini")
+        visible: sectionTransitionsExpanded
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Abilita effetti di transizione fluidi (fade, slide, zoom) quando si cambia immagine\n\nSe disabilitato, le immagini cambiano istantaneamente senza animazione")
@@ -171,6 +194,7 @@ Kirigami.FormLayout {
         id: transitionRandomCheckBox
         Kirigami.FormData.label: i18n("")
         text: i18n("Randomizza tipo di transizione")
+        visible: sectionTransitionsExpanded
         enabled: transitionEnabledCheckBox.checked
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
@@ -181,7 +205,7 @@ Kirigami.FormLayout {
         id: transitionDurationField
         Kirigami.FormData.label: i18n("Durata Transizione (ms):")
         placeholderText: i18n("1000")
-        enabled: transitionEnabledCheckBox.checked
+        visible: sectionTransitionsExpanded && transitionEnabledCheckBox.checked
         validator: IntValidator {
             bottom: 100
             top: 10000
@@ -194,7 +218,8 @@ Kirigami.FormLayout {
     QtControls2.ComboBox {
         id: transitionTypeComboBox
         Kirigami.FormData.label: i18n("Tipo di Transizione:")
-        enabled: transitionEnabledCheckBox.checked && !transitionRandomCheckBox.checked
+        visible: sectionTransitionsExpanded && transitionEnabledCheckBox.checked
+        enabled: !transitionRandomCheckBox.checked
         model: [
             i18n("Fade"),
             i18n("Slide"),
@@ -213,17 +238,20 @@ Kirigami.FormLayout {
     // ============================================
     // SEZIONE 4: VISUALIZZAZIONE IMMAGINE
     // ============================================
-    
-    QtControls2.Label {
+
+    QtControls2.CheckBox {
         Kirigami.FormData.isSection: true
         text: i18n("Visualizzazione Immagine")
+        checked: sectionVisualizationExpanded
         font.bold: true
         font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
+        onCheckedChanged: sectionVisualizationExpanded = checked
     }
 
     QtControls2.ComboBox {
         id: fillModeComboBox
         Kirigami.FormData.label: i18n("Modalità Riempimento:")
+        visible: sectionVisualizationExpanded
         model: [
             i18n("Stretch (Allunga)"),
             i18n("Fit (Mantieni Proporzioni)"),
@@ -242,6 +270,7 @@ Kirigami.FormLayout {
         Kirigami.FormData.label: i18n("Scala Immagine (%):")
         Kirigami.FormData.buddyFor: imageScaleSlider
         implicitHeight: imageScaleSlider.implicitHeight
+        visible: sectionVisualizationExpanded
         
         Row {
             anchors.fill: parent
@@ -270,6 +299,7 @@ Kirigami.FormLayout {
     KQuickControls.ColorButton {
         id: colorButton
         Kirigami.FormData.label: i18n("Colore di Sfondo:")
+        visible: sectionVisualizationExpanded
         dialogTitle: i18n("Seleziona Colore di Sfondo")
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
@@ -280,6 +310,7 @@ Kirigami.FormLayout {
         id: blurCheckBox
         Kirigami.FormData.label: i18n("Sfondo sfocato:")
         text: i18n("Applica effetto sfocatura alle immagini")
+        visible: sectionVisualizationExpanded
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Applica un effetto di sfocatura alle immagini per un aspetto più morbido e artistico\n\nL'effetto è semplificato (riduzione opacità) e può essere regolato con l'opacità sotto")
@@ -289,7 +320,7 @@ Kirigami.FormLayout {
         Kirigami.FormData.label: i18n("Opacità Sfocatura (%):")
         Kirigami.FormData.buddyFor: blurOpacitySlider
         implicitHeight: blurOpacitySlider.implicitHeight
-        enabled: blurCheckBox.checked
+        visible: sectionVisualizationExpanded && blurCheckBox.checked
         
         Row {
             anchors.fill: parent
@@ -323,17 +354,20 @@ Kirigami.FormLayout {
     // SEZIONE 5: OVERLAY E INFORMAZIONI
     // ============================================
     
-    QtControls2.Label {
+    QtControls2.CheckBox {
         Kirigami.FormData.isSection: true
         text: i18n("Overlay e Informazioni")
+        checked: sectionOverlayExpanded
         font.bold: true
         font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
+        onCheckedChanged: sectionOverlayExpanded = checked
     }
 
     QtControls2.CheckBox {
         id: showLoadingIndicatorCheckBox
         Kirigami.FormData.label: i18n("Indicatore Caricamento:")
         text: i18n("Mostra indicatore durante il caricamento immagini")
+        visible: sectionOverlayExpanded
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Mostra un indicatore visivo mentre le immagini vengono caricate da Nextcloud\n\nUtile per sapere quando un'immagine è in caricamento, specialmente con connessioni lente")
@@ -343,6 +377,7 @@ Kirigami.FormLayout {
         id: showExifInfoCheckBox
         Kirigami.FormData.label: i18n("Informazioni EXIF:")
         text: i18n("Mostra overlay informazioni EXIF (OSD)")
+        visible: sectionOverlayExpanded
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Mostra metadati EXIF (data, fotocamera, ISO, apertura, tempo esposizione, ecc.) come overlay quando cambiano le immagini\n\nLe informazioni vengono estratte automaticamente dalle foto che contengono dati EXIF")
@@ -352,7 +387,7 @@ Kirigami.FormLayout {
         id: exifInfoDurationField
         Kirigami.FormData.label: i18n("Durata Info EXIF (secondi):")
         placeholderText: i18n("5")
-        enabled: showExifInfoCheckBox.checked
+        visible: sectionOverlayExpanded && showExifInfoCheckBox.checked
         validator: IntValidator {
             bottom: 0
             top: 30
@@ -366,6 +401,7 @@ Kirigami.FormLayout {
         id: showLocationOsdCheckBox
         Kirigami.FormData.label: i18n("Overlay Posizione:")
         text: i18n("Mostra overlay posizione permanente")
+        visible: sectionOverlayExpanded
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Mostra la posizione (città, paese) come overlay permanente con font script\n\nLa posizione viene determinata automaticamente dalle coordinate GPS nelle foto (se presenti) usando reverse geocoding")
@@ -375,7 +411,7 @@ Kirigami.FormLayout {
         id: locationOsdFontSizeField
         Kirigami.FormData.label: i18n("Dimensione Font Posizione (px):")
         placeholderText: i18n("24")
-        enabled: showLocationOsdCheckBox.checked
+        visible: sectionOverlayExpanded && showLocationOsdCheckBox.checked
         validator: IntValidator {
             bottom: 12
             top: 72
@@ -388,7 +424,7 @@ Kirigami.FormLayout {
     QtControls2.ComboBox {
         id: locationOsdPositionComboBox
         Kirigami.FormData.label: i18n("Posizione Overlay:")
-        enabled: showLocationOsdCheckBox.checked
+        visible: sectionOverlayExpanded && showLocationOsdCheckBox.checked
         model: [
             i18n("Alto-Sinistra"),
             i18n("Alto-Destra"),
@@ -407,7 +443,7 @@ Kirigami.FormLayout {
         id: locationOsdXOffsetField
         Kirigami.FormData.label: i18n("Offset X Posizione (px):")
         placeholderText: i18n("20")
-        enabled: showLocationOsdCheckBox.checked
+        visible: sectionOverlayExpanded && showLocationOsdCheckBox.checked
         validator: IntValidator {
             bottom: -200
             top: 200
@@ -421,7 +457,7 @@ Kirigami.FormLayout {
         id: locationOsdYOffsetField
         Kirigami.FormData.label: i18n("Offset Y Posizione (px):")
         placeholderText: i18n("20")
-        enabled: showLocationOsdCheckBox.checked
+        visible: sectionOverlayExpanded && showLocationOsdCheckBox.checked
         validator: IntValidator {
             bottom: -200
             top: 200
@@ -434,7 +470,7 @@ Kirigami.FormLayout {
     QtControls2.ComboBox {
         id: locationOsdFontFamilyComboBox
         Kirigami.FormData.label: i18n("Famiglia Font Posizione:")
-        enabled: showLocationOsdCheckBox.checked
+        visible: sectionOverlayExpanded && showLocationOsdCheckBox.checked
         editable: true
         
         // Static list with common script fonts - user can type custom ones
@@ -461,5 +497,29 @@ Kirigami.FormLayout {
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Seleziona un font script/corsivo per l'overlay di posizione\n\nPuoi scegliere tra i font predefiniti o digitare il nome di un font personalizzato installato sul sistema.\nScegli 'System Default' per usare il font di sistema.\n\nI font script danno un aspetto più elegante e decorativo all'overlay")
+    }
+
+    QtControls2.CheckBox {
+        id: showMethodIndicatorCheckBox
+        Kirigami.FormData.label: i18n("Indicatore Metodo:")
+        text: i18n("Mostra indicatore metodo elaborazione (QML/C++)")
+        visible: sectionOverlayExpanded
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Mostra un badge nell'angolo superiore destro che indica se l'immagine corrente è processata con QML (Data URLs) o C++ (file temporanei)\n\n• Badge BLU = QML (modalità standard, usa Data URLs)\n• Badge VERDE = C++ (modalità ottimizzata, usa file temporanei, ~30% meno memoria)\n\nUtile per verificare quale metodo viene utilizzato")
+    }
+
+    QtControls2.TextField {
+        id: methodIndicatorDurationField
+        Kirigami.FormData.label: i18n("Durata Indicatore (secondi):")
+        placeholderText: i18n("3")
+        visible: sectionOverlayExpanded && showMethodIndicatorCheckBox.checked
+        validator: IntValidator {
+            bottom: 0
+            top: 30
+        }
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Quanto tempo mostrare l'indicatore del metodo dopo il caricamento di un'immagine\n\nRange: 0-30 secondi\n• 0 = sempre visibile (non scompare mai)\n• 1-30 = scompare automaticamente dopo N secondi\n\nConsigliato: 3-5 secondi per vedere rapidamente il metodo usato")
     }
 }

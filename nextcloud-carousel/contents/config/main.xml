@@ -123,6 +123,18 @@
       <max>50</max>
       <whatsthis>Maximum size for images to be loaded. Images larger than this will be skipped to prevent memory issues. Set to 0 for automatic detection (default: 5MB). Recommended values: 3MB for low-end systems, 5-10MB for mid-range, 10-15MB for high-end systems (16GB+ RAM).</whatsthis>
     </entry>
+    <entry name="ShowMethodIndicator" type="bool">
+      <label>Show processing method indicator (QML/C++)</label>
+      <default>false</default>
+      <whatsthis>Shows a small badge in the top-right corner indicating whether the current image is processed using QML (Data URLs) or C++ (file temporanei). Green badge = C++ (optimized), Blue badge = QML (standard).</whatsthis>
+    </entry>
+    <entry name="MethodIndicatorDuration" type="int">
+      <label>Method indicator display duration (seconds, 0 = always visible)</label>
+      <default>3</default>
+      <min>0</min>
+      <max>30</max>
+      <whatsthis>How long to show the method indicator after an image loads. Set to 0 to keep it always visible.</whatsthis>
+    </entry>
   </group>
 </kcfg>
 

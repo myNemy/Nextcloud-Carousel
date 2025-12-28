@@ -34,6 +34,41 @@ fi
 echo "Removing plugin..."
 rm -rf "$PLUGIN_DIR"
 
+# Remove C++ component if installed (Livello 1: NextcloudDownloader)
+QML_PLUGIN_USER="$HOME/.local/lib/qt6/qml/org/nextcloud/carousel"
+QML_PLUGIN_SYSTEM="/usr/lib/qt6/qml/org/nextcloud/carousel"
+
+if [ -d "$QML_PLUGIN_USER" ]; then
+    echo "Removing C++ component from user installation..."
+    rm -rf "$QML_PLUGIN_USER"
+    echo "✅ C++ component removed from ~/.local/lib/qt6/qml/"
+fi
+
+if [ -d "$QML_PLUGIN_SYSTEM" ]; then
+    echo "⚠️  C++ component found in system installation: $QML_PLUGIN_SYSTEM"
+    echo "   This requires sudo to remove."
+    read -p "   Remove system installation? (y/N): " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if sudo rm -rf "$QML_PLUGIN_SYSTEM" 2>/dev/null; then
+            echo "✅ C++ component removed from /usr/lib/qt6/qml/"
+        else
+            echo "⚠️  Failed to remove system installation (may require sudo password)"
+            echo "   You can remove it manually with: sudo rm -rf $QML_PLUGIN_SYSTEM"
+        fi
+    else
+        echo "   Skipping system installation removal"
+    fi
+fi
+
+# Remove cache directory (temporary files downloaded by NextcloudDownloader)
+CACHE_DIR="$HOME/.cache/nextcloud-carousel"
+if [ -d "$CACHE_DIR" ]; then
+    echo "Removing cache directory (downloaded images)..."
+    rm -rf "$CACHE_DIR"
+    echo "✅ Cache directory removed"
+fi
+
 echo ""
 echo "✅ Plugin removed successfully!"
 echo ""

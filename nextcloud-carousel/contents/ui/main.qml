@@ -10,14 +10,156 @@ import org.kde.plasma.wallpapers.image as Wallpaper
 import org.kde.plasma.plasmoid
 import org.kde.kirigami as Kirigami
 
+// C++ ImageProvider: NO direct import to avoid plasmashell crash if module missing
+// We'll detect availability via image://nextcloud/ URL test and load dynamically
+
+// C++ ImageProvider: Dynamic loading with guaranteed fallback
+// According to Qt documentation, we use a Loader to dynamically test module availability
+// If module is not found, Loader.status will be Loader.Error and we use QML fallback
+// This approach guarantees plasmashell will always start, even if C++ module is missing
+
 WallpaperItem {
     id: root
 
+    // C++ NextcloudDownloader availability (detected dynamically)
+    // Livello 1: Componente che gestisce solo download da Nextcloud
+    property bool nextcloudDownloaderAvailable: false
+    property var nextcloudDownloader: null
+    property var pendingDownloads: ({})  // Track pending downloads: { imageUrl: true }
+    
+    // Track current image processing method (for indicator)
+    property string currentImageMethod: "QML"  // "QML" or "C++"
+    
+    // Log when method changes
+    onCurrentImageMethodChanged: {
+        console.log("═══════════════════════════════════════════════════════════")
+        console.log("🔄 METHOD CHANGED:", currentImageMethod)
+        console.log("   nextcloudDownloaderAvailable:", nextcloudDownloaderAvailable)
+        console.log("   nextcloudDownloader:", nextcloudDownloader ? "available" : "null")
+        console.log("═══════════════════════════════════════════════════════════")
+    }
+    
+    // Loader for NextcloudDownloader singleton (loaded dynamically)
+    Loader {
+        id: nextcloudDownloaderLoader
+        asynchronous: true
+        active: false
+        source: "NextcloudDownloaderSingleton.qml"
+        
+        onLoaded: {
+            console.log("🔍 NextcloudDownloaderLoader onLoaded: item =", item, ", item.downloader =", item ? item.downloader : "N/A")
+            if (item && item.downloader) {
+                root.nextcloudDownloader = item.downloader
+                root.nextcloudDownloaderAvailable = true  // Mark as available
+                console.log("✅✅✅ NextcloudDownloader singleton loaded successfully! Downloader:", root.nextcloudDownloader)
+                console.log("✅✅✅ nextcloudDownloaderAvailable set to TRUE")
+                console.log("🔍 Downloader methods available: downloadImage =", typeof root.nextcloudDownloader.downloadImage)
+                
+                // Connect to imageDownloaded signal
+                if (root.nextcloudDownloader.imageDownloaded) {
+                    root.nextcloudDownloader.imageDownloaded.connect(function(localFilePath, originalUrl) {
+                        console.log("📥 NextcloudDownloader: imageDownloaded signal received for", originalUrl, "->", localFilePath)
+                        // Check if this is a pending download we're waiting for
+                        if (root.pendingDownloads && root.pendingDownloads[originalUrl]) {
+                            var pendingInfo = root.pendingDownloads[originalUrl]
+                            console.log("🔄 Image ready for pending download, creating image component from file:", localFilePath)
+                            // Remove from pending downloads
+                            delete root.pendingDownloads[originalUrl]
+                            // Create image component from local file (Livello 2: usa file locale con ottimizzazioni Plasma)
+                            root.currentImageMethod = "C++"  // Track method used
+                            console.log("✅✅✅ METHOD: C++ - Using local file from NextcloudDownloader (downloaded):", localFilePath)
+                            // Orientation will be read from EXIF in createImageComponentFromFile
+                            carouselController.createImageComponentFromFile(localFilePath, pendingInfo.imageUrl || originalUrl, pendingInfo.skipAnimation || false, pendingInfo.orientation)
+                            
+                            // Update method indicator
+                            if (root.configuration.ShowMethodIndicator) {
+                                methodIndicator.opacity = 1.0
+                                if (root.configuration.MethodIndicatorDuration > 0) {
+                                    methodIndicatorTimer.restart()
+                                }
+                            }
+                        }
+                    })
+                    console.log("✅ Connected to imageDownloaded signal")
+                } else {
+                    console.warn("⚠️  imageDownloaded signal not available on downloader")
+                }
+                
+                // Connect to downloadFailed signal
+                if (root.nextcloudDownloader.downloadFailed) {
+                    root.nextcloudDownloader.downloadFailed.connect(function(url, errorString) {
+                        console.warn("❌ NextcloudDownloader: Download failed for", url, ":", errorString)
+                        // Remove from pending and fallback to QML
+                        delete root.pendingDownloads[url]
+                    })
+                }
+            } else {
+                console.warn("⚠️  NextcloudDownloaderLoader loaded but item or downloader is null")
+            }
+        }
+        
+        onStatusChanged: {
+            console.log("🔍 NextcloudDownloaderLoader status changed:", status, "(Null=" + Loader.Null + ", Ready=" + Loader.Ready + ", Loading=" + Loader.Loading + ", Error=" + Loader.Error + ")")
+            if (status === Loader.Error) {
+                console.warn("⚠️  NextcloudDownloaderLoader failed to load - module may not be available")
+                console.warn("   This is OK - will use QML fallback (Data URLs)")
+            } else if (status === Loader.Ready) {
+                console.log("✅ NextcloudDownloaderLoader is Ready")
+            } else if (status === Loader.Loading) {
+                console.log("⏳ NextcloudDownloaderLoader is Loading...")
+            }
+        }
+    }
+    
+    // Function to try loading NextcloudDownloader singleton dynamically
+    function tryImportNextcloudDownloader() {
+        if (root.nextcloudDownloader) {
+            // Already imported
+            console.log("✅ NextcloudDownloader already available")
+            return
+        }
+        
+        if (nextcloudDownloaderLoader.status === Loader.Loading || nextcloudDownloaderLoader.status === Loader.Ready) {
+            // Already loading or loaded
+            console.log("🔍 NextcloudDownloaderLoader already active, status:", nextcloudDownloaderLoader.status)
+            return
+        }
+        
+        console.log("🔍 Attempting to load NextcloudDownloader singleton via Loader...")
+        nextcloudDownloaderLoader.active = true
+    }
+
     Component.onCompleted: {
         root.loading = true
+        
+        // CRITICAL: Log immediately to verify Component.onCompleted is called
+        console.log("═══════════════════════════════════════════════════════════")
+        console.log("🔍 NEXTCLOUD CAROUSEL: Component.onCompleted called")
+        console.log("🔍 Testing C++ NextcloudDownloader availability...")
+        console.log("═══════════════════════════════════════════════════════════")
+        
+        // Try to load NextcloudDownloader (Livello 1: solo download)
+        // This will update nextcloudDownloaderAvailable asynchronously
+        root.tryImportNextcloudDownloader()
+        
+        // Initialize carousel (will use QML fallback if C++ not available)
+        console.log("🔍 Initializing carousel controller...")
         carouselController.initialize()
     }
 
+    // Timer for EXIF orientation read timeout
+    Timer {
+        id: orientationReadTimer
+        interval: 500
+        repeat: false
+        property var callback: null
+        onTriggered: {
+            if (callback) {
+                callback()
+            }
+        }
+    }
+    
     // Carousel controller
     QtObject {
         id: carouselController
@@ -36,7 +178,7 @@ WallpaperItem {
         property int retryCount: 0  // Track retry attempts for PROPFIND
         property int retryDelay: 30  // Current retry delay in seconds (starts at 30s)
         property int maxRetries: 10  // Maximum retry attempts before giving up
-        property int maxImageSizeForDataUrl: 5 * 1024 * 1024  // Will be calculated dynamically based on available memory
+        property int maxImageSizeForDataUrl: 10 * 1024 * 1024  // 10MB default (increased from 5MB)
         property var tempFilePaths: []  // Track temporary file paths for cleanup
         
         // Dynamic memory limit calculation
@@ -47,12 +189,14 @@ WallpaperItem {
         // Safety factor: 0.1 (use only 10% of available memory for images)
         function calculateDynamicImageLimit() {
             // Default conservative values (for systems with unknown memory)
-            var defaultLimitMB = 5  // 5MB default (safe for most systems)
+            // NOTE: With sourceSize limit now implemented, decoded memory is reduced by 50-75%
+            // However, we keep conservative defaults for Data URL size (base64 string memory)
+            var defaultLimitMB = 3  // 3MB default (more conservative, safe for all systems)
             var minLimitMB = 3  // Minimum limit (3MB - safe even on low-end systems)
             var maxLimitMB = 30  // Maximum limit (30MB - even high-end systems shouldn't need more)
             
             // Try to get configured memory limit from user settings
-            // If not configured, use conservative defaults
+            // If not configured (0), use conservative default
             var configuredLimitMB = root.configuration.MaxImageSizeMB || 0
             
             if (configuredLimitMB > 0) {
@@ -63,18 +207,21 @@ WallpaperItem {
                 return
             }
             
-            // Auto-calculation based on conservative estimates
-            // Since we can't read actual memory in QML, we use a conservative default
-            // Users can override via configuration if they have more/less memory
+            // Auto-calculation: when MaxImageSizeMB = 0, use conservative default
+            // Since QML cannot read system memory directly, we use a safe default
+            // NOTE: With sourceSize limit (now implemented), decoded image memory is reduced by 50-75%
+            // This means we can use slightly higher limits, but we keep conservative defaults
+            // Users can configure MaxImageSizeMB manually based on their system:
+            // - 3-5MB for low-end systems (< 8GB RAM)
+            // - 5-10MB for mid-range systems (8-16GB RAM)
+            // - 10-15MB for high-end systems (> 16GB RAM)
+            // With sourceSize, these limits are safer because decoded memory is limited
             var estimatedLimitMB = defaultLimitMB
             
             // Log the calculated limit
             maxImageSizeForDataUrl = estimatedLimitMB * 1024 * 1024
-            console.log("📊 Dynamic image size limit calculated:", estimatedLimitMB, "MB (default - configure MaxImageSizeMB for custom limit)")
-            console.log("💡 Tip: Set MaxImageSizeMB in configuration:")
-            console.log("   - 3-5MB for low-end systems (< 8GB RAM)")
-            console.log("   - 5-10MB for mid-range systems (8-16GB RAM)")
-            console.log("   - 10-15MB for high-end systems (> 16GB RAM)")
+            console.log("📊 Image size limit (auto):", estimatedLimitMB, "MB (MaxImageSizeMB = 0)")
+            console.log("💡 Configure MaxImageSizeMB (3-30MB) in settings to customize based on your system memory")
         }
         
         // Calculate optimal cache size based on total number of photos in the list
@@ -599,7 +746,13 @@ WallpaperItem {
                 var photoUrl = photoList[currentIndex]
                 // Reduced logging verbosity - only log every 10th image to prevent log bloat
                 if (currentIndex % 10 === 0 || currentIndex === 0) {
-                    console.log("Loading image", currentIndex + 1, "of", photoList.length)
+                    // Reduced logging frequency for performance (log every 100 images or first/last)
+                    var shouldLog = (currentIndex === 0 || 
+                                    currentIndex === photoList.length - 1 || 
+                                    (currentIndex + 1) % 100 === 0)
+                    if (shouldLog) {
+                        console.log("Loading image", currentIndex + 1, "of", photoList.length)
+                    }
                 }
                 
                 // Image component doesn't support auth in URL, so we need to download it
@@ -708,7 +861,14 @@ WallpaperItem {
         // Now supports JPEG, TIFF, and WebP (which can contain EXIF)
         function readExifOrientation(arrayBuffer) {
             try {
-                var bytes = new Uint8Array(arrayBuffer)
+                // CRITICAL: Limit memory usage - only read first 64KB for EXIF parsing
+                // EXIF data is always in the first segments, so we don't need the full image
+                // This prevents creating huge Uint8Array from large images (8MB+)
+                var maxBytesForExif = Math.min(arrayBuffer.byteLength, 65536)  // 64KB limit
+                
+                // Create a view of only the first 64KB to prevent memory issues with large images
+                // Using ArrayBuffer.slice() would copy, so we use Uint8Array with offset/length
+                var bytes = new Uint8Array(arrayBuffer, 0, maxBytesForExif)
                 if (bytes.length < 8) {
                     return 0  // Too small to contain EXIF
                 }
@@ -716,7 +876,7 @@ WallpaperItem {
                 // Optimize: EXIF data is always in the first segments (typically < 64KB)
                 // Limit search to first 64KB to prevent UI blocking on very large images
                 // This follows QML best practices for heavy operations
-                var maxSearchBytes = Math.min(bytes.length, 65536)  // 64KB limit
+                var maxSearchBytes = bytes.length  // Already limited to 64KB above
                 
                 var tiffOffset = -1
                 var isIntel = false
@@ -884,8 +1044,15 @@ WallpaperItem {
         // Now supports JPEG, TIFF, and WebP
         function readExifTags(arrayBuffer) {
             try {
-                console.log("🌍 readExifTags called, arrayBuffer length:", arrayBuffer ? arrayBuffer.byteLength : "null")
-                var bytes = new Uint8Array(arrayBuffer)
+                // CRITICAL: Limit memory usage - only read first 64KB for EXIF parsing
+                // EXIF data is always in the first segments, so we don't need the full image
+                // This prevents creating huge Uint8Array from large images (8MB+)
+                var maxBytesForExif = Math.min(arrayBuffer.byteLength, 65536)  // 64KB limit
+                console.log("🌍 readExifTags called, arrayBuffer length:", arrayBuffer ? arrayBuffer.byteLength : "null", "reading first", maxBytesForExif, "bytes for EXIF")
+                
+                // Create a view of only the first 64KB to prevent memory issues with large images
+                // Using ArrayBuffer.slice() would copy, so we use Uint8Array with offset/length
+                var bytes = new Uint8Array(arrayBuffer, 0, maxBytesForExif)
                 if (bytes.length < 8) {
                     console.log("🌍 readExifTags: too small, returning")
                     return  // Too small to contain EXIF
@@ -894,7 +1061,7 @@ WallpaperItem {
                 var tiffOffset = -1
                 var isIntel = false
                 
-                var maxSearchBytes = Math.min(bytes.length, 65536)  // 64KB limit
+                var maxSearchBytes = bytes.length  // Already limited to 64KB above
                 console.log("🌍 readExifTags: searching for EXIF, maxSearchBytes:", maxSearchBytes)
                 
                 // Check if it's a JPEG (starts with 0xFFD8)
@@ -1817,24 +1984,6 @@ WallpaperItem {
             // Set filename in separate property for reliable QML binding
             currentFileName = fileName
             
-            // Check cache first
-            var cachedDataUrl = getCachedDataUrl(imageUrl)
-            if (cachedDataUrl) {
-                // Removed verbose cache hit logging
-                // Use cached data URL directly
-                // Note: EXIF data may not be available from cache, OSD will show if available
-                createImageComponent(cachedDataUrl, imageUrl, skipAnimation, currentExifData.orientation)
-                
-                // Update OSD if EXIF info is enabled and we have filename or EXIF data
-                if (root.configuration.ShowExifInfo && (currentFileName !== "" || currentExifData.hasData)) {
-                    exifOsd.opacity = 1.0
-                    if (root.configuration.ExifInfoDuration > 0) {
-                        exifHideTimer.restart()
-                    }
-                }
-                return
-            }
-            
             // Extract URL without auth for the request
             var cleanUrl = imageUrl
             if (imageUrl.indexOf("@") !== -1) {
@@ -1849,6 +1998,77 @@ WallpaperItem {
             
             var username = root.configuration.Username
             var password = root.configuration.Password
+            
+            // Livello 1: Try NextcloudDownloader (C++) - gestisce solo download e salva in file temporanei
+            // Livello 2: Usa file locale con ottimizzazioni standard Plasma (sourceSize, cache: false, asynchronous: true)
+            console.log("🔍 loadImage check: nextcloudDownloaderAvailable =", nextcloudDownloaderAvailable, ", nextcloudDownloader =", nextcloudDownloader, ", type =", typeof nextcloudDownloader)
+            if (nextcloudDownloaderAvailable && nextcloudDownloader) {
+                console.log("✅✅✅ Using C++ NextcloudDownloader for download")
+                try {
+                    var localFilePath = nextcloudDownloader.downloadImage(cleanUrl, username, password)
+                    if (localFilePath && localFilePath.length > 0) {
+                        // NextcloudDownloader returned a local file path (cached or ready), use it immediately
+                        root.currentImageMethod = "C++"  // Track method used
+                        console.log("✅✅✅ METHOD: C++ - Using local file from NextcloudDownloader (cached):", localFilePath)
+                        // Use local file with Plasma standard optimizations (Livello 2)
+                        // Orientation will be read from EXIF in createImageComponentFromFile
+                        carouselController.createImageComponentFromFile(localFilePath, imageUrl, skipAnimation, undefined)
+                        
+                        // Update method indicator
+                        if (root.configuration.ShowMethodIndicator) {
+                            methodIndicator.opacity = 1.0
+                            if (root.configuration.MethodIndicatorDuration > 0) {
+                                methodIndicatorTimer.restart()
+                            }
+                        }
+                        return
+                    } else {
+                        // NextcloudDownloader returned empty string (download in progress)
+                        // Track this download so we can reload when imageDownloaded signal is received
+                        if (!root.pendingDownloads) {
+                            root.pendingDownloads = {}
+                        }
+                        root.pendingDownloads[cleanUrl] = { imageUrl: imageUrl, skipAnimation: skipAnimation, orientation: undefined }  // Store context - orientation will be read from EXIF
+                        root.currentImageMethod = "C++"  // Track method used
+                        console.log("⏳ NextcloudDownloader: Download in progress, waiting for imageDownloaded signal for", cleanUrl)
+                        return  // Exit - image will be loaded when signal is received
+                    }
+                } catch (e) {
+                    console.warn("NextcloudDownloader error, falling back to QML:", e)
+                    if (root.pendingDownloads && root.pendingDownloads[cleanUrl]) {
+                        delete root.pendingDownloads[cleanUrl]  // Clear pending status
+                    }
+                }
+            }
+            
+            // Fallback to Data URL (used when NextcloudDownloader not available or download in progress)
+            console.log("⚠️  METHOD: QML (fallback) - NextcloudDownloader not available or download in progress")
+            // Check cache first
+            var cachedDataUrl = getCachedDataUrl(imageUrl)
+            if (cachedDataUrl) {
+                // Removed verbose cache hit logging
+                // Use cached data URL directly
+                root.currentImageMethod = "QML"  // Track method used
+                console.log("✅✅✅ METHOD: QML - Using cached Data URL")
+                createImageComponent(cachedDataUrl, imageUrl, skipAnimation, currentExifData.orientation)
+                
+                // Update method indicator
+                if (root.configuration.ShowMethodIndicator) {
+                    methodIndicator.opacity = 1.0
+                    if (root.configuration.MethodIndicatorDuration > 0) {
+                        methodIndicatorTimer.restart()
+                    }
+                }
+                
+                // Update OSD if EXIF info is enabled and we have filename or EXIF data
+                if (root.configuration.ShowExifInfo && (currentFileName !== "" || currentExifData.hasData)) {
+                    exifOsd.opacity = 1.0
+                    if (root.configuration.ExifInfoDuration > 0) {
+                        exifHideTimer.restart()
+                    }
+                }
+                return
+            }
             
             // Reduced logging verbosity - only log errors, not every download
             
@@ -1928,6 +2148,39 @@ WallpaperItem {
                             }
                         }
                         
+                        // CRITICAL FIX: Check image size FIRST before processing EXIF
+                        // This prevents downloading and processing very large images that will be skipped anyway
+                        var imageSize = xhr.response.byteLength
+                        var maxSize = carouselController.maxImageSizeForDataUrl
+                        
+                        if (imageSize > maxSize) {
+                            console.warn("⚠️  Image too large for data URL conversion:", (imageSize / 1024 / 1024).toFixed(2), "MB (limit:", (maxSize / 1024 / 1024).toFixed(2), "MB)")
+                            console.warn("⚠️  Skipping image to prevent OOM crash. Consider resizing images in Nextcloud.")
+                            
+                            // CRITICAL FIX: Clean up XHR and response data immediately to prevent memory corruption
+                            // The XHR has already downloaded the full image, so we need to release it explicitly
+                            var tempXhr = xhr
+                            xhr = null  // Release XHR reference
+                            
+                            // Force cleanup of response data with delayed GC hint
+                            Qt.callLater(function() {
+                                if (tempXhr && tempXhr.response) {
+                                    // Clear response reference to help GC
+                                    tempXhr.response = null
+                                }
+                                tempXhr = null
+                            })
+                            
+                            root.loading = false
+                            
+                            // Try next image if available
+                            if (photoList.length > 1) {
+                                console.log("Skipping oversized image, trying next...")
+                                carouselTimer.restart()
+                            }
+                            return
+                        }
+                        
                         // Read EXIF orientation before converting to base64
                         var orientation = 0
                         
@@ -1973,14 +2226,15 @@ WallpaperItem {
                                 currentExifData = exifData2
                             }
                             
-                            // Log EXIF data found for debugging
-                            if (orientation !== 0) {
-                                console.log("EXIF orientation detected, applying rotation:", orientation, "degrees")
-                            }
-                            if (currentExifData.hasData) {
-                                console.log("📸 EXIF data found - Make:", currentExifData.make, "Model:", currentExifData.model, 
-                                          "ISO:", currentExifData.iso, "DateTime:", currentExifData.dateTime,
-                                          "FNumber:", currentExifData.fNumber, "ExposureTime:", currentExifData.exposureTime)
+                            // Log EXIF data found for debugging (reduced verbosity for performance)
+                            // Only log if EXIF info is enabled in settings to reduce log spam
+                            if (root.configuration.ShowExifInfo) {
+                                if (orientation !== 0) {
+                                    console.log("EXIF orientation:", orientation, "degrees")
+                                }
+                                if (currentExifData.hasData) {
+                                    console.log("📸 EXIF:", currentExifData.make, currentExifData.model)
+                                }
                             }
                             
                             // Force a complete refresh of currentExifData to ensure QML bindings update
@@ -2004,28 +2258,11 @@ WallpaperItem {
                                 hasData: currentExifData.hasData
                             }
                             currentExifData = finalExifData
-                            console.log("🔄 Forced EXIF data refresh - Make:", finalExifData.make, "Model:", finalExifData.model, 
-                                      "ISO:", finalExifData.iso, "FNumber:", finalExifData.fNumber, "ExposureTime:", finalExifData.exposureTime,
-                                      "GPS:", finalExifData.latitude, finalExifData.longitude, "Location:", finalExifData.city, finalExifData.country)
+                            // Removed verbose EXIF logging to improve performance
                         }
                         
-                        // CRITICAL FIX: Limit image size for data URL conversion to prevent OOM
-                        // Images larger than maxImageSizeForDataUrl will be skipped to prevent memory exhaustion
-                        var imageSize = xhr.response.byteLength
-                        var maxSize = carouselController.maxImageSizeForDataUrl
-                        
-                        if (imageSize > maxSize) {
-                            console.warn("⚠️  Image too large for data URL conversion:", (imageSize / 1024 / 1024).toFixed(2), "MB (limit:", (maxSize / 1024 / 1024).toFixed(2), "MB)")
-                            console.warn("⚠️  Skipping image to prevent OOM crash. Consider resizing images in Nextcloud.")
-                            root.loading = false
-                            
-                            // Try next image if available
-                            if (photoList.length > 1) {
-                                console.log("Skipping oversized image, trying next...")
-                                carouselTimer.restart()
-                            }
-                            return
-                        }
+                        // Note: Image size check was moved BEFORE EXIF processing to prevent
+                        // downloading and processing images that will be skipped anyway
                         
                         // Convert arraybuffer to base64 data URL
                         // IMPORTANT: pass the ArrayBuffer directly.
@@ -2058,7 +2295,17 @@ WallpaperItem {
                         // Create image component with data URL
                         // Note: Reverse geocoding is asynchronous and will update location when it arrives
                         // If location is in cache, it will be available immediately
+                        root.currentImageMethod = "QML"  // Track method used (Data URL)
+                        console.log("✅✅✅ METHOD: QML - Using downloaded Data URL (fallback)")
                         createImageComponent(dataUrl, imageUrl, skipAnimation, orientation)
+                        
+                        // Update method indicator
+                        if (root.configuration.ShowMethodIndicator) {
+                            methodIndicator.opacity = 1.0
+                            if (root.configuration.MethodIndicatorDuration > 0) {
+                                methodIndicatorTimer.restart()
+                            }
+                        }
                         
                         // CRITICAL: Force immediate cleanup of data URL after use to free memory
                         // Use multiple delayed cleanups to force GC and memory release
@@ -2174,22 +2421,221 @@ WallpaperItem {
         }
         
         // Create image component with data URL (extracted for reuse)
+        // Livello 2: Crea componente immagine da file locale con ottimizzazioni standard Plasma
+        // Usa le stesse ottimizzazioni dei plugin ufficiali: sourceSize, cache: false, asynchronous: true
+        function createImageComponentFromFile(localFilePath, imageUrl, skipAnimation, orientation) {
+            // Use StackView pattern (following KDE official implementation)
+            // Clean up any existing pending image
+            if (imageStack.pendingImage) {
+                imageStack.pendingImage.statusChanged.disconnect(imageStack.replaceWhenLoaded)
+                imageStack.pendingImage.destroy()
+                imageStack.pendingImage = null
+            }
+            
+            // Determine if we should skip animation (first image, explicit skip, or transitions disabled)
+            imageStack.doesSkipAnimation = (imageStack.currentItem === undefined) || !!skipAnimation || !root.configuration.TransitionEnabled
+            
+            // Determine transition type (random or fixed)
+            if (root.configuration.TransitionEnabled && root.configuration.TransitionRandom) {
+                // Randomize transition type (0=Fade, 1=Slide, 2=Zoom)
+                imageStack.transitionType = Math.floor(Math.random() * 3)
+            } else {
+                // Use fixed transition type from configuration
+                imageStack.transitionType = root.configuration.TransitionType || 0
+            }
+            
+            // CRITICAL: Read EXIF orientation from local file BEFORE creating image component
+            // This ensures auto-rotation works correctly when using C++ component
+            var imageOrientation = orientation !== undefined && orientation !== 0 ? orientation : 0
+            
+            // Function to create image component with orientation
+            function createImageWithOrientation(orientationValue) {
+                var component = imageStack.imageComponent
+                if (component && component.status === Component.Ready) {
+                    // Create with explicit dimensions to avoid size issues
+                    // Set initial position/scale based on transition type
+                    var initialX = (imageStack.transitionType === 1) ? imageStack.width : 0
+                    var initialScale = (imageStack.transitionType === 2) ? 0.8 : 1.0
+                
+                // CRITICAL: Use Plasma standard optimizations (same as org.kde.image plugin)
+                // sourceSize: limits decoded resolution to screen size + devicePixelRatio
+                // This reduces memory usage by 50-75% without quality loss
+                var screenWidth = imageStack.width || 1920
+                var screenHeight = imageStack.height || 1080
+                var devicePixelRatio = Screen.devicePixelRatio || 1.0
+                var sourceSizeLimit = Qt.size(
+                    Math.ceil(screenWidth * devicePixelRatio),
+                    Math.ceil(screenHeight * devicePixelRatio)
+                )
+                
+                imageStack.pendingImage = component.createObject(imageStack, {
+                    "source": "file://" + localFilePath,  // Use file:// URL for local file
+                    "fillMode": root.configuration.FillMode,
+                    "color": root.configuration.Color,
+                    "blur": root.configuration.Blur,
+                    "blurOpacity": root.configuration.BlurOpacity,
+                    "imageScale": root.configuration.ImageScale,
+                    "orientation": imageOrientation,
+                    "sourceSizeLimit": sourceSizeLimit,  // Plasma standard optimization
+                    "width": imageStack.width,
+                    "height": imageStack.height,
+                    "x": initialX,
+                    "scale": initialScale
+                })
+                
+                    if (imageStack.pendingImage) {
+                        // Connect to statusChanged to replace when loaded
+                        if (imageStack.pendingImage.statusChanged) {
+                            imageStack.pendingImage.statusChanged.connect(imageStack.replaceWhenLoaded)
+                        } else {
+                            console.warn("statusChanged signal not available!")
+                        }
+                        // Try to replace immediately (will wait if still loading)
+                        imageStack.replaceWhenLoaded()
+                    } else {
+                        console.error("Failed to create image component from file:", component ? component.errorString() : "component is null")
+                        root.loading = false
+                    }
+                } else {
+                    console.error("Image component not ready:", component ? component.errorString() : "component is null")
+                    root.loading = false
+                }
+            }
+            
+            // Read ALL EXIF data from local file using C++ component (more reliable than QML)
+            // This ensures ShowExifInfo option works correctly when using C++ component
+            console.log("🔍 Checking EXIF read: localFilePath =", localFilePath, ", nextcloudDownloaderAvailable =", nextcloudDownloaderAvailable, ", nextcloudDownloader =", nextcloudDownloader, ", getAllExifData =", nextcloudDownloader ? (typeof nextcloudDownloader.getAllExifData) : "N/A")
+            if (localFilePath && nextcloudDownloaderAvailable && nextcloudDownloader && nextcloudDownloader.getAllExifData) {
+                try {
+                    console.log("🔍 Calling getAllExifData for:", localFilePath)
+                    var allExifData = nextcloudDownloader.getAllExifData(localFilePath)
+                    console.log("🔍 getAllExifData returned:", JSON.stringify(allExifData), ", type =", typeof allExifData, ", hasData =", allExifData ? (allExifData.hasData !== undefined ? allExifData.hasData : "undefined") : "null")
+                    
+                    // QVariantMap might need explicit property access
+                    var hasData = false
+                    if (allExifData) {
+                        // Try different ways to access hasData (QVariantMap conversion can vary)
+                        hasData = allExifData.hasData === true || allExifData["hasData"] === true || (allExifData.hasData !== undefined && allExifData.hasData !== false && allExifData.hasData !== 0)
+                        console.log("🔍 hasData check:", hasData, ", allExifData.hasData =", allExifData.hasData, ", allExifData['hasData'] =", allExifData["hasData"])
+                    }
+                    
+                    if (allExifData && hasData) {
+                        console.log("✅ EXIF data found via C++:", allExifData)
+                        
+                        // Update currentExifData with all EXIF fields (matching QML structure)
+                        // Use bracket notation for QVariantMap access (more reliable)
+                        var exifData = {
+                            orientation: (allExifData["orientation"] !== undefined ? allExifData["orientation"] : (allExifData.orientation || 0)),
+                            dateTime: (allExifData["dateTime"] !== undefined ? String(allExifData["dateTime"]) : (allExifData.dateTime || "")),
+                            make: (allExifData["make"] !== undefined ? String(allExifData["make"]) : (allExifData.make || "")),
+                            model: (allExifData["model"] !== undefined ? String(allExifData["model"]) : (allExifData.model || "")),
+                            iso: (allExifData["iso"] !== undefined ? allExifData["iso"] : (allExifData.iso || 0)),
+                            fNumber: (allExifData["fNumber"] !== undefined ? allExifData["fNumber"] : (allExifData.fNumber || 0)),
+                            exposureTime: (allExifData["exposureTime"] !== undefined ? String(allExifData["exposureTime"]) : (allExifData.exposureTime || "")),
+                            latitude: (allExifData["latitude"] !== undefined ? allExifData["latitude"] : (allExifData.latitude || 0)),
+                            longitude: (allExifData["longitude"] !== undefined ? allExifData["longitude"] : (allExifData.longitude || 0)),
+                            latitudeRef: (allExifData["latitudeRef"] !== undefined ? String(allExifData["latitudeRef"]) : (allExifData.latitudeRef || "")),
+                            longitudeRef: (allExifData["longitudeRef"] !== undefined ? String(allExifData["longitudeRef"]) : (allExifData.longitudeRef || "")),
+                            country: "",  // Will be filled by reverse geocoding if GPS available
+                            city: "",     // Will be filled by reverse geocoding if GPS available
+                            hasData: true
+                        }
+                        console.log("🔍 Parsed EXIF data:", JSON.stringify(exifData))
+                        currentExifData = exifData
+                        
+                        // Use orientation for image rotation
+                        imageOrientation = exifData.orientation
+                        
+                        // Update OSD if EXIF info is enabled (same as QML fallback)
+                        if (root.configuration.ShowExifInfo && (currentFileName !== "" || currentExifData.hasData)) {
+                            console.log("🖼️  Showing OSD (C++) - Make:", currentExifData.make, "Model:", currentExifData.model, 
+                                      "ISO:", currentExifData.iso, "FNumber:", currentExifData.fNumber, 
+                                      "ExposureTime:", currentExifData.exposureTime, "DateTime:", currentExifData.dateTime,
+                                      "GPS:", currentExifData.latitude, currentExifData.longitude)
+                            exifOsd.opacity = 1.0
+                            if (root.configuration.ExifInfoDuration > 0) {
+                                exifHideTimer.restart()
+                            }
+                        }
+                        
+                        // If GPS coordinates are available, trigger reverse geocoding (same as QML)
+                        if (exifData.latitude !== 0 && exifData.longitude !== 0) {
+                            reverseGeocode(exifData.latitude, exifData.longitude, function(fromCache, country, city) {
+                                var exifDataUpdate = currentExifData
+                                exifDataUpdate.country = country || ""
+                                exifDataUpdate.city = city || ""
+                                currentExifData = exifDataUpdate
+                                
+                                // Update OSD again after reverse geocoding (location might have changed)
+                                if (root.configuration.ShowExifInfo && currentExifData.hasData) {
+                                    exifOsd.opacity = 1.0
+                                    if (root.configuration.ExifInfoDuration > 0) {
+                                        exifHideTimer.restart()
+                                    }
+                                }
+                            })
+                        }
+                    } else {
+                        console.log("ℹ️  No EXIF data found (normal orientation)")
+                        // Reset EXIF data
+                        currentExifData = {
+                            orientation: 0,
+                            dateTime: "",
+                            make: "",
+                            model: "",
+                            iso: 0,
+                            fNumber: 0,
+                            exposureTime: "",
+                            latitude: 0,
+                            longitude: 0,
+                            latitudeRef: "",
+                            longitudeRef: "",
+                            country: "",
+                            city: "",
+                            hasData: false
+                        }
+                    }
+                } catch (e) {
+                    console.warn("⚠️  Error reading EXIF data via C++:", e)
+                }
+            }
+            
+            // Now create image component with the correct orientation
+            createImageWithOrientation(imageOrientation)
+        }
+        
         function createImageComponent(dataUrl, imageUrl, skipAnimation, orientation) {
             // Removed data URL length logging to prevent log bloat
             
-            // CRITICAL: Validate data URL size before creating component
-            // This prevents memory exhaustion from extremely large data URLs
-            if (dataUrl && dataUrl.length > carouselController.maxImageSizeForDataUrl * 1.4) {
-                // Data URL is ~1.3x larger than original (base64 encoding)
-                // If it exceeds our limit, skip it
-                console.error("⚠️  Data URL too large:", (dataUrl.length / 1024 / 1024).toFixed(2), "MB - skipping to prevent OOM")
-                root.loading = false
-                if (photoList.length > 1) {
-                    console.log("Skipping oversized data URL, trying next image...")
-                    carouselTimer.restart()
-                }
-                return
+        // CRITICAL: Validate data URL size before creating component
+        // This prevents memory exhaustion from extremely large data URLs
+        // NOTE: With sourceSize limit, we can allow larger original images because
+        // the decoded resolution is limited, reducing memory usage by 50-75%
+        // However, the Data URL itself still consumes memory, so we keep a limit
+        var effectiveLimit = carouselController.maxImageSizeForDataUrl
+        
+        // With sourceSize, the decoded image memory is limited, but the Data URL
+        // (base64 string) still uses memory. We can be slightly more lenient
+        // because the decoded image won't use as much memory.
+        // Increase limit by 30% when sourceSize is used (screen resolution is known)
+        var screenWidth = imageStack.width || 0
+        var screenHeight = imageStack.height || 0
+        if (screenWidth > 0 && screenHeight > 0) {
+            // sourceSize will be used, so we can allow slightly larger Data URLs
+            effectiveLimit = effectiveLimit * 1.3  // +30% because decoded size is limited
+        }
+        
+        if (dataUrl && dataUrl.length > effectiveLimit * 1.4) {
+            // Data URL is ~1.3x larger than original (base64 encoding)
+            // If it exceeds our limit, skip it
+            console.error("⚠️  Data URL too large:", (dataUrl.length / 1024 / 1024).toFixed(2), "MB (limit:", (effectiveLimit / 1024 / 1024).toFixed(2), "MB) - skipping to prevent OOM")
+            root.loading = false
+            if (photoList.length > 1) {
+                console.log("Skipping oversized data URL, trying next image...")
+                carouselTimer.restart()
             }
+            return
+        }
             
             // Use StackView pattern (following KDE official implementation)
             // Clean up any existing pending image
@@ -2219,6 +2665,17 @@ WallpaperItem {
                 var initialX = (imageStack.transitionType === 1) ? imageStack.width : 0
                 var initialScale = (imageStack.transitionType === 2) ? 0.8 : 1.0
                 var imageOrientation = orientation !== undefined ? orientation : 0
+                
+                // CRITICAL FIX: Calculate sourceSize limit based on screen resolution (Qt official best practice)
+                // This limits the decoded image resolution, reducing memory usage by 50-75%
+                // Formula: screen resolution + 20% margin for quality (handles scaling and rotation)
+                var screenWidth = imageStack.width || 1920  // Fallback to 1920 if not available
+                var screenHeight = imageStack.height || 1080  // Fallback to 1080 if not available
+                // Add 20% margin for quality (handles imageScale > 100%, rotations, and high-DPI displays)
+                var maxWidth = Math.ceil(screenWidth * 1.2)
+                var maxHeight = Math.ceil(screenHeight * 1.2)
+                var sourceSizeLimit = Qt.size(maxWidth, maxHeight)
+                
                 imageStack.pendingImage = component.createObject(imageStack, {
                     "source": dataUrl,
                     "fillMode": root.configuration.FillMode,
@@ -2227,6 +2684,7 @@ WallpaperItem {
                     "blurOpacity": root.configuration.BlurOpacity,
                     "imageScale": root.configuration.ImageScale,
                     "orientation": imageOrientation,
+                    "sourceSizeLimit": sourceSizeLimit,  // NEW: Limit decoded resolution
                     "width": imageStack.width,
                     "height": imageStack.height,
                     "x": initialX,
@@ -2746,6 +3204,44 @@ WallpaperItem {
             
         }
         
+        // Method Indicator OSD (QML vs C++) - Shows processing method
+        Rectangle {
+            id: methodIndicator
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 10
+            width: methodIndicatorText.width + 20
+            height: methodIndicatorText.height + 10
+            radius: 5
+            color: root.currentImageMethod === "C++" ? "#4CAF50" : "#2196F3"  // Green for C++, Blue for QML
+            opacity: 0
+            visible: root.configuration.ShowMethodIndicator && opacity > 0
+            
+            Behavior on opacity {
+                NumberAnimation { duration: 300 }
+            }
+            
+            Text {
+                id: methodIndicatorText
+                anchors.centerIn: parent
+                text: root.currentImageMethod === "C++" ? "C++" : "QML"
+                font.pixelSize: 14
+                font.bold: true
+                color: "white"
+            }
+            
+            // Auto-hide timer
+            Timer {
+                id: methodIndicatorTimer
+                interval: (root.configuration.MethodIndicatorDuration || 3) * 1000
+                onTriggered: {
+                    if (root.configuration.MethodIndicatorDuration > 0) {
+                        methodIndicator.opacity = 0
+                    }
+                }
+            }
+        }
+        
         // Location OSD (Permanent overlay with script font)
         Text {
             id: locationOsd
@@ -2907,4 +3403,5 @@ WallpaperItem {
         }
     }
 }
+
 
