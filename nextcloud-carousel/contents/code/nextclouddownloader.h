@@ -14,6 +14,7 @@
 #include <QHash>
 #include <QMutex>
 #include <QVariantMap>
+#include <QPointer>
 
 /**
  * NextcloudDownloader - Livello 1: Gestisce solo il download da Nextcloud

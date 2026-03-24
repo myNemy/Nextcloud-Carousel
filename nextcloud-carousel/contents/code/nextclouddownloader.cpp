@@ -97,10 +97,22 @@ QString NextcloudDownloader::downloadImage(const QString &url,
     
     // Set timeout using QTimer (Qt 6 approach)
     // Note: QNetworkReply doesn't have direct timeout, but we can abort after timeout
-    QTimer::singleShot(60000, reply, [reply, this, url]() {
-        if (reply && reply->isRunning()) {
+    // Use QPointer to safely handle object destruction before timeout fires
+    QPointer<QNetworkReply> replyPtr(reply);
+    QPointer<NextcloudDownloader> selfPtr(this);
+    QTimer::singleShot(60000, reply, [replyPtr, selfPtr, url]() {
+        // Check if objects are still valid before accessing them
+        if (!selfPtr) {
+            // NextcloudDownloader was destroyed, nothing to do
+            return;
+        }
+        if (!replyPtr) {
+            // Reply was already destroyed, nothing to do
+            return;
+        }
+        if (replyPtr->isRunning()) {
             qWarning() << "⏱️  NextcloudDownloader: Download timeout for" << url;
-            reply->abort();
+            replyPtr->abort();
             // The downloadFinished slot will handle cleanup via downloadFailed signal
         }
     });
