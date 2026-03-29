@@ -75,58 +75,6 @@ msgstr "10"
 msgid "Time each image is displayed before switching to the next"
 msgstr "Tempo in cui ogni immagine viene visualizzata prima di passare alla successiva"
 
-#: contents/ui/config.qml:81
-msgid "Transition Duration (ms):"
-msgstr "Durata Transizione (ms):"
-
-#: contents/ui/config.qml:82
-msgid "1000"
-msgstr "1000"
-
-#: contents/ui/config.qml:89
-msgid "Duration of the transition effect between images (in milliseconds)"
-msgstr "Durata dell'effetto di transizione tra le immagini (in millisecondi)"
-
-#: contents/ui/config.qml:94
-msgid "Transitions:"
-msgstr "Transizioni:"
-
-#: contents/ui/config.qml:95
-msgid "Enable transitions between images"
-msgstr "Abilita transizioni tra le immagini"
-
-#: contents/ui/config.qml:98
-msgid "Enable smooth transition effects (fade, slide, zoom) when switching between images"
-msgstr "Abilita effetti di transizione fluidi (dissolvenza, scorrimento, zoom) quando si passa tra le immagini"
-
-#: contents/ui/config.qml:104
-msgid "Randomize transition type"
-msgstr "Randomizza tipo di transizione"
-
-#: contents/ui/config.qml:108
-msgid "Randomly select a different transition type for each image change"
-msgstr "Seleziona casualmente un diverso tipo di transizione per ogni cambio immagine"
-
-#: contents/ui/config.qml:113
-msgid "Transition Type:"
-msgstr "Tipo di Transizione:"
-
-#: contents/ui/config.qml:115
-msgid "Fade"
-msgstr "Dissolvenza"
-
-#: contents/ui/config.qml:116
-msgid "Slide"
-msgstr "Scorrimento"
-
-#: contents/ui/config.qml:117
-msgid "Zoom"
-msgstr "Zoom"
-
-#: contents/ui/config.qml:123
-msgid "Type of transition: Fade (crossfade), Slide (horizontal movement), Zoom (scale effect)"
-msgstr "Tipo di transizione: Dissolvenza (crossfade), Scorrimento (movimento orizzontale), Zoom (effetto scala)"
-
 #: contents/ui/config.qml:128
 msgid "Order Mode:"
 msgstr "Modalità Ordine:"

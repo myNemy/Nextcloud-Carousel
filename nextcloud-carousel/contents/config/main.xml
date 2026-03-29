@@ -26,22 +26,6 @@
       <label>Interval between slides (seconds)</label>
       <default>10</default>
     </entry>
-    <entry name="TransitionDuration" type="int">
-      <label>Transition animation duration (milliseconds)</label>
-      <default>1000</default>
-    </entry>
-    <entry name="TransitionEnabled" type="bool">
-      <label>Enable transitions between images</label>
-      <default>true</default>
-    </entry>
-    <entry name="TransitionRandom" type="bool">
-      <label>Randomize transition type for each image</label>
-      <default>false</default>
-    </entry>
-    <entry name="TransitionType" type="int">
-      <label>Transition type: 0=Fade, 1=Slide, 2=Zoom (used when random is disabled)</label>
-      <default>0</default>
-    </entry>
     <entry name="RandomOrder" type="int">
       <label>Order mode: 0=Sequential, 1=Random, 2=Shuffle once, 3=Smart random (avoid repeats)</label>
       <default>0</default>

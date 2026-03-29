@@ -1,7 +1,7 @@
 # Nextcloud Wallpaper Plugins - KDE Plasma 6
 
 Two wallpaper plugins for KDE Plasma 6 that display media from your Nextcloud server:
-- **Nextcloud Carousel**: Photo carousel with smooth transitions and automatic orientation correction
+- **Nextcloud Carousel**: Photo carousel from Nextcloud with automatic orientation correction
 - **Nextcloud Video**: Video wallpaper with playback controls and automatic switching
 
 > ⚠️ **WARNING**: This project is an **experiment** and is provided "as is" without warranties. Use it at your own risk.
@@ -10,13 +10,11 @@ Two wallpaper plugins for KDE Plasma 6 that display media from your Nextcloud se
 
 ### Nextcloud Carousel (Image Plugin)
 - ✅ **Automatic photo carousel** from Nextcloud
-- ✅ **Smooth animated transitions** (Fade, Slide, Zoom)
 - ✅ **Automatic EXIF orientation** correction
 - ✅ **4 ordering modes**: Sequential, Random, Shuffle Once, Smart Random
 - ✅ **Recursive subfolder support** (loads images from all subfolders)
 - ✅ **Multiple image formats**: JPEG, PNG, WebP, GIF, BMP, SVG, TIFF
 - ✅ **Configurable display settings**: Fill mode, scale, blur, background color
-- ✅ **Transition controls**: Enable/disable, randomize, duration control
 - ✅ **Loading indicator**: Show/hide option
 
 ### Nextcloud Video (Video Plugin)
@@ -114,15 +112,6 @@ killall plasmashell && kstart plasmashell
   - **Shuffle Once**: Shuffled once, then sequential
   - **Smart Random**: Random but avoids recent repeats
 
-#### Transition Settings
-- **Transitions**: Enable/disable transitions between images
-- **Transition Type**: 
-  - **Fade**: Smooth fade in/out (recommended)
-  - **Slide**: Horizontal slide animation
-  - **Zoom**: Zoom in/out effect
-- **Transition Duration**: Animation duration in milliseconds (100-10000, default: 1000)
-- **Randomize Transition**: Randomly select transition type for each image
-
 #### Display Settings
 - **Fill Mode**: How images fill the screen
   - **Stretch**: Fill entire screen (may distort)
@@ -165,19 +154,6 @@ The video plugin supports:
 - **Audio control**: Videos are muted by default (can be enabled)
 - **Smooth loading**: Loading indicator shows progress during video buffering
 - **Error handling**: Automatically skips to next video on playback errors
-
-### Transitions
-
-The plugin supports three transition types with smooth animations:
-
-- **Fade**: Opacity animation (0→1 for new image, 1→0 for old image)
-- **Slide**: Horizontal slide animation (new image slides in from right)
-- **Zoom**: Scale animation (new image zooms in from 0.8 to 1.0)
-
-Transitions can be:
-- **Enabled/Disabled**: Toggle transitions on/off
-- **Randomized**: Random transition type for each image
-- **Customized**: Fixed transition type with adjustable duration
 
 ### Automatic EXIF Orientation
 
@@ -241,12 +217,6 @@ journalctl --user -b | grep -i "nextcloud\|carousel"
 - The plugin automatically corrects EXIF orientation
 - If images are still rotated, the EXIF data might be missing or corrupted
 - Try re-saving images in Nextcloud or using a different image viewer
-
-### Transitions Not Working
-
-- Check that "Transitions" is enabled in configuration
-- Verify transition duration is set (100-10000ms)
-- Check logs for errors: `journalctl --user -b | grep -i "transition\|animation"`
 
 ### Reinstall Plugin
 

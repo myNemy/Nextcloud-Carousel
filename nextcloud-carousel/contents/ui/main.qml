@@ -4,7 +4,6 @@
 */
 
 import QtQuick
-import QtQuick.Controls as QQC2
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.wallpapers.image as Wallpaper
 import org.kde.plasma.plasmoid
@@ -62,6 +61,10 @@ WallpaperItem {
                         // Check if this is a pending download we're waiting for
                         if (root.pendingDownloads && root.pendingDownloads[originalUrl]) {
                             var pendingInfo = root.pendingDownloads[originalUrl]
+                            if (pendingInfo.loadGen !== carouselController.slideLoadGeneration) {
+                                delete root.pendingDownloads[originalUrl]
+                                return
+                            }
                             console.log("🔄 Image ready for pending download, creating image component from file:", localFilePath)
                             // Remove from pending downloads
                             delete root.pendingDownloads[originalUrl]
@@ -69,7 +72,7 @@ WallpaperItem {
                             root.currentImageMethod = "C++"  // Track method used
                             console.log("✅✅✅ METHOD: C++ - Using local file from NextcloudDownloader (downloaded):", localFilePath)
                             // Orientation will be read from EXIF in createImageComponentFromFile
-                            carouselController.createImageComponentFromFile(localFilePath, pendingInfo.imageUrl || originalUrl, pendingInfo.skipAnimation || false, pendingInfo.orientation)
+                            carouselController.createImageComponentFromFile(localFilePath, pendingInfo.imageUrl || originalUrl, pendingInfo.orientation)
                             
                             // Update method indicator
                             if (root.configuration.ShowMethodIndicator) {
@@ -89,8 +92,21 @@ WallpaperItem {
                 if (root.nextcloudDownloader.downloadFailed) {
                     root.nextcloudDownloader.downloadFailed.connect(function(url, errorString) {
                         console.warn("❌ NextcloudDownloader: Download failed for", url, ":", errorString)
-                        // Remove from pending and fallback to QML
+                        var pendingInfo = root.pendingDownloads[url]
+                        if (!pendingInfo) {
+                            return
+                        }
+                        // Ignore failures from an older slide (user already advanced)
+                        if (pendingInfo.loadGen !== carouselController.slideLoadGeneration) {
+                            delete root.pendingDownloads[url]
+                            return
+                        }
                         delete root.pendingDownloads[url]
+                        root.loading = false
+                        if (carouselController.photoList.length > 1) {
+                            console.log("Skipping failed C++ download, advancing on next slide tick...")
+                            carouselTimer.restart()
+                        }
                     })
                 }
             } else {
@@ -171,6 +187,8 @@ WallpaperItem {
         property bool initialized: false
         property int lastIndex: -1  // Track last shown index
         property int imageSwitchCount: 0  // Track number of image switches for periodic cleanup
+        // Incremented on each slide load request; async completions must match or they are ignored (timer vs. slow network race).
+        property int slideLoadGeneration: 0
         property int maxCacheSize: 1  // Will be calculated based on photoList.length
         property var dataUrlCache: ({})  // LRU cache: { imageUrl: dataUrl }
         property var cacheOrder: []  // Track cache order for LRU eviction (first = least recently used)
@@ -184,8 +202,8 @@ WallpaperItem {
         // Dynamic memory limit calculation
         // Calculates safe image size limit based on estimated available memory
         // Formula: (estimated_available_memory * safety_factor) / (memory_per_image_multiplier * concurrent_images)
-        // Memory per image multiplier: ~8.6x (ArrayBuffer + Base64 + DataURL + Decoded + Transitions)
-        // Concurrent images: 2-3 (during transitions)
+        // Memory per image multiplier (QML fallback path): ~8.6x (ArrayBuffer + Base64 + DataURL + Decoded)
+        // Single slide surface: at most one ImageComponent at a time (no StackView / transitions)
         // Safety factor: 0.1 (use only 10% of available memory for images)
         function calculateDynamicImageLimit() {
             // Default conservative values (for systems with unknown memory)
@@ -228,7 +246,7 @@ WallpaperItem {
         // Strategy: DISABLED to prevent memory leaks (OOM Killer issue)
         // Data URLs base64 are very large and not properly released, causing memory accumulation
         // Disabling cache forces re-download but prevents OOM crashes
-        // StackView already destroys Image components when removed, so we don't need to cache
+        // Only one slide ImageComponent at a time; cache of data URLs disabled to limit RAM
         function updateCacheSize() {
             // CRITICAL FIX: Disable cache completely to prevent memory leaks
             // This is a temporary fix until proper memory management is implemented
@@ -574,40 +592,13 @@ WallpaperItem {
             // Increment switch counter for periodic cleanup
             imageSwitchCount++
             
-            // CRITICAL: Aggressive cleanup after every image to prevent memory accumulation
-            // This is essential to prevent OOM crashes with large images
+            // Data URL cache stays disabled (maxCacheSize 0); clear maps each slide to drop JS references early
             clearDataUrlCache()
             
-            // Force immediate cleanup with delay to allow GC
-            Qt.callLater(function() {
-                // Give GC a chance to run
-                clearDataUrlCache()
-            })
-            
-            // Periodic deep cleanup every 5 images
             if (imageSwitchCount >= 5) {
                 imageSwitchCount = 0
-                
-                // Force StackView cleanup with multiple passes
                 Qt.callLater(function() {
-                    // Check StackView depth
-                    if (imageStack.depth > 2) {
-                        console.warn("⚠️  StackView depth still high after cleanup:", imageStack.depth, "- forcing aggressive cleanup")
-                        
-                        // Force cleanup of old StackView items
-                        // StackView should only have 1-2 items (current + maybe one in transition)
-                        var currentDepth = imageStack.depth
-                        if (currentDepth > 2) {
-                            // Try to get and destroy old items (StackView doesn't expose items directly)
-                            // This is a safety measure - StackView should handle cleanup automatically
-                            console.warn("⚠️  StackView depth:", currentDepth, "- possible memory leak, consider restarting plasmashell")
-                        }
-                    }
-                    
-                    // Second cleanup pass after delay
-                    Qt.callLater(function() {
-                        clearDataUrlCache()
-                    })
+                    clearDataUrlCache()
                 })
             }
             
@@ -743,6 +734,8 @@ WallpaperItem {
         
         function updateCurrentImage() {
             if (currentIndex >= 0 && currentIndex < photoList.length) {
+                slideLoadGeneration++
+                var loadGen = slideLoadGeneration
                 var photoUrl = photoList[currentIndex]
                 // Reduced logging verbosity - only log every 10th image to prevent log bloat
                 if (currentIndex % 10 === 0 || currentIndex === 0) {
@@ -756,7 +749,7 @@ WallpaperItem {
                 }
                 
                 // Image component doesn't support auth in URL, so we need to download it
-                loadImageWithAuth(photoUrl)
+                loadImageWithAuth(photoUrl, loadGen)
             }
         }
         
@@ -1951,12 +1944,15 @@ WallpaperItem {
             xhr.send()
         }
         
-        function loadImageWithAuth(imageUrl, skipAnimation) {
+        function loadImageWithAuth(imageUrl, loadGen) {
             // Safety check
             if (!imageUrl) {
                 console.error("❌ loadImageWithAuth: Invalid imageUrl")
                 root.loading = false
                 return
+            }
+            if (loadGen === undefined) {
+                loadGen = carouselController.slideLoadGeneration
             }
             
             root.loading = true
@@ -2015,12 +2011,16 @@ WallpaperItem {
                     }
                     var localFilePath = nextcloudDownloader.downloadImage(cleanUrl, username, password, maxSizeMB)
                     if (localFilePath && localFilePath.length > 0) {
+                        if (loadGen !== carouselController.slideLoadGeneration) {
+                            root.loading = false
+                            return
+                        }
                         // NextcloudDownloader returned a local file path (cached or ready), use it immediately
                         root.currentImageMethod = "C++"  // Track method used
                         console.log("✅✅✅ METHOD: C++ - Using local file from NextcloudDownloader (cached):", localFilePath)
                         // Use local file with Plasma standard optimizations (Livello 2)
                         // Orientation will be read from EXIF in createImageComponentFromFile
-                        carouselController.createImageComponentFromFile(localFilePath, imageUrl, skipAnimation, undefined)
+                        carouselController.createImageComponentFromFile(localFilePath, imageUrl, undefined)
                         
                         // Update method indicator
                         if (root.configuration.ShowMethodIndicator) {
@@ -2036,7 +2036,7 @@ WallpaperItem {
                         if (!root.pendingDownloads) {
                             root.pendingDownloads = {}
                         }
-                        root.pendingDownloads[cleanUrl] = { imageUrl: imageUrl, skipAnimation: skipAnimation, orientation: undefined }  // Store context - orientation will be read from EXIF
+                        root.pendingDownloads[cleanUrl] = { imageUrl: imageUrl, orientation: undefined, loadGen: loadGen }  // orientation from EXIF; loadGen avoids stale UI updates
                         root.currentImageMethod = "C++"  // Track method used
                         console.log("⏳ NextcloudDownloader: Download in progress, waiting for imageDownloaded signal for", cleanUrl)
                         return  // Exit - image will be loaded when signal is received
@@ -2054,11 +2054,15 @@ WallpaperItem {
             // Check cache first
             var cachedDataUrl = getCachedDataUrl(imageUrl)
             if (cachedDataUrl) {
+                if (loadGen !== carouselController.slideLoadGeneration) {
+                    root.loading = false
+                    return
+                }
                 // Removed verbose cache hit logging
                 // Use cached data URL directly
                 root.currentImageMethod = "QML"  // Track method used
                 console.log("✅✅✅ METHOD: QML - Using cached Data URL")
-                createImageComponent(cachedDataUrl, imageUrl, skipAnimation, currentExifData.orientation)
+                createImageComponent(cachedDataUrl, imageUrl, currentExifData.orientation)
                 
                 // Update method indicator
                 if (root.configuration.ShowMethodIndicator) {
@@ -2086,6 +2090,9 @@ WallpaperItem {
             xhr.timeout = 60000  // 60 seconds timeout for image download (images can be large)
             
             xhr.ontimeout = function() {
+                if (loadGen !== carouselController.slideLoadGeneration) {
+                    return
+                }
                 console.error("⏱️  Image download timed out after 60 seconds:", cleanUrl.replace(/https?:\/\/[^@]+@/, ""))
                 console.error("This may indicate network issues or a very large image file")
                 root.loading = false
@@ -2098,6 +2105,10 @@ WallpaperItem {
             
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === XMLHttpRequest.DONE) {
+                    if (loadGen !== carouselController.slideLoadGeneration) {
+                        root.loading = false
+                        return
+                    }
                     if (xhr.status === 200) {
                         // Removed verbose download logging to prevent log bloat
                         
@@ -2305,7 +2316,7 @@ WallpaperItem {
                         // If location is in cache, it will be available immediately
                         root.currentImageMethod = "QML"  // Track method used (Data URL)
                         console.log("✅✅✅ METHOD: QML - Using downloaded Data URL (fallback)")
-                        createImageComponent(dataUrl, imageUrl, skipAnimation, orientation)
+                        createImageComponent(dataUrl, imageUrl, orientation)
                         
                         // Update method indicator
                         if (root.configuration.ShowMethodIndicator) {
@@ -2416,6 +2427,9 @@ WallpaperItem {
             }
             
             xhr.onerror = function() {
+                if (loadGen !== carouselController.slideLoadGeneration) {
+                    return
+                }
                 console.error("Network error loading image (connection may be down):", cleanUrl.replace(/https?:\/\/[^@]+@/, ""))
                 root.loading = false
                 // Try next image if available (same behavior as timeout)
@@ -2431,26 +2445,9 @@ WallpaperItem {
         // Create image component with data URL (extracted for reuse)
         // Livello 2: Crea componente immagine da file locale con ottimizzazioni standard Plasma
         // Usa le stesse ottimizzazioni dei plugin ufficiali: sourceSize, cache: false, asynchronous: true
-        function createImageComponentFromFile(localFilePath, imageUrl, skipAnimation, orientation) {
-            // Use StackView pattern (following KDE official implementation)
-            // Clean up any existing pending image
-            if (imageStack.pendingImage) {
-                imageStack.pendingImage.statusChanged.disconnect(imageStack.replaceWhenLoaded)
-                imageStack.pendingImage.destroy()
-                imageStack.pendingImage = null
-            }
-            
-            // Determine if we should skip animation (first image, explicit skip, or transitions disabled)
-            imageStack.doesSkipAnimation = (imageStack.currentItem === undefined) || !!skipAnimation || !root.configuration.TransitionEnabled
-            
-            // Determine transition type (random or fixed)
-            if (root.configuration.TransitionEnabled && root.configuration.TransitionRandom) {
-                // Randomize transition type (0=Fade, 1=Slide, 2=Zoom)
-                imageStack.transitionType = Math.floor(Math.random() * 3)
-            } else {
-                // Use fixed transition type from configuration
-                imageStack.transitionType = root.configuration.TransitionType || 0
-            }
+        function createImageComponentFromFile(localFilePath, imageUrl, orientation) {
+            // Single image host: destroy previous slide before showing the next (no dual StackView items)
+            imageHost.destroyCurrentSlideImage()
             
             // CRITICAL: Read EXIF orientation from local file BEFORE creating image component
             // This ensures auto-rotation works correctly when using C++ component
@@ -2458,25 +2455,20 @@ WallpaperItem {
             
             // Function to create image component with orientation
             function createImageWithOrientation(orientationValue) {
-                var component = imageStack.imageComponent
+                var component = imageHost.imageComponent
                 if (component && component.status === Component.Ready) {
-                    // Create with explicit dimensions to avoid size issues
-                    // Set initial position/scale based on transition type
-                    var initialX = (imageStack.transitionType === 1) ? imageStack.width : 0
-                    var initialScale = (imageStack.transitionType === 2) ? 0.8 : 1.0
-                
                 // CRITICAL: Use Plasma standard optimizations (same as org.kde.image plugin)
                 // sourceSize: limits decoded resolution to screen size + devicePixelRatio
                 // This reduces memory usage by 50-75% without quality loss
-                var screenWidth = imageStack.width || 1920
-                var screenHeight = imageStack.height || 1080
+                var screenWidth = imageHost.width || 1920
+                var screenHeight = imageHost.height || 1080
                 var devicePixelRatio = Screen.devicePixelRatio || 1.0
                 var sourceSizeLimit = Qt.size(
                     Math.ceil(screenWidth * devicePixelRatio),
                     Math.ceil(screenHeight * devicePixelRatio)
                 )
                 
-                imageStack.pendingImage = component.createObject(imageStack, {
+                imageHost.slideImageInstance = component.createObject(imageHost, {
                     "source": "file://" + localFilePath,  // Use file:// URL for local file
                     "fillMode": root.configuration.FillMode,
                     "color": root.configuration.Color,
@@ -2485,21 +2477,19 @@ WallpaperItem {
                     "imageScale": root.configuration.ImageScale,
                     "orientation": imageOrientation,
                     "sourceSizeLimit": sourceSizeLimit,  // Plasma standard optimization
-                    "width": imageStack.width,
-                    "height": imageStack.height,
-                    "x": initialX,
-                    "scale": initialScale
+                    "width": imageHost.width,
+                    "height": imageHost.height,
+                    "x": 0,
+                    "scale": 1.0
                 })
                 
-                    if (imageStack.pendingImage) {
-                        // Connect to statusChanged to replace when loaded
-                        if (imageStack.pendingImage.statusChanged) {
-                            imageStack.pendingImage.statusChanged.connect(imageStack.replaceWhenLoaded)
+                    if (imageHost.slideImageInstance) {
+                        if (imageHost.slideImageInstance.statusChanged) {
+                            imageHost.slideImageInstance.statusChanged.connect(imageHost.onSlideImageStatusChanged)
                         } else {
                             console.warn("statusChanged signal not available!")
                         }
-                        // Try to replace immediately (will wait if still loading)
-                        imageStack.replaceWhenLoaded()
+                        imageHost.onSlideImageStatusChanged()
                     } else {
                         console.error("Failed to create image component from file:", component ? component.errorString() : "component is null")
                         root.loading = false
@@ -2628,7 +2618,7 @@ WallpaperItem {
             createImageWithOrientation(imageOrientation)
         }
         
-        function createImageComponent(dataUrl, imageUrl, skipAnimation, orientation) {
+        function createImageComponent(dataUrl, imageUrl, orientation) {
             // Removed data URL length logging to prevent log bloat
             
         // CRITICAL: Validate data URL size before creating component
@@ -2642,8 +2632,8 @@ WallpaperItem {
         // (base64 string) still uses memory. We can be slightly more lenient
         // because the decoded image won't use as much memory.
         // Increase limit by 30% when sourceSize is used (screen resolution is known)
-        var screenWidth = imageStack.width || 0
-        var screenHeight = imageStack.height || 0
+        var screenWidth = imageHost.width || 0
+        var screenHeight = imageHost.height || 0
         if (screenWidth > 0 && screenHeight > 0) {
             // sourceSize will be used, so we can allow slightly larger Data URLs
             effectiveLimit = effectiveLimit * 1.3  // +30% because decoded size is limited
@@ -2661,46 +2651,23 @@ WallpaperItem {
             return
         }
             
-            // Use StackView pattern (following KDE official implementation)
-            // Clean up any existing pending image
-            if (imageStack.pendingImage) {
-                imageStack.pendingImage.statusChanged.disconnect(imageStack.replaceWhenLoaded)
-                imageStack.pendingImage.destroy()
-                imageStack.pendingImage = null
-            }
+            imageHost.destroyCurrentSlideImage()
             
-            // Determine if we should skip animation (first image, explicit skip, or transitions disabled)
-            imageStack.doesSkipAnimation = (imageStack.currentItem === undefined) || !!skipAnimation || !root.configuration.TransitionEnabled
-            
-            // Determine transition type (random or fixed)
-            if (root.configuration.TransitionEnabled && root.configuration.TransitionRandom) {
-                // Randomize transition type (0=Fade, 1=Slide, 2=Zoom)
-                imageStack.transitionType = Math.floor(Math.random() * 3)
-            } else {
-                // Use fixed transition type from configuration
-                imageStack.transitionType = root.configuration.TransitionType || 0
-            }
-            
-            // Create image component in background (following KDE pattern)
-            var component = imageStack.imageComponent
+            var component = imageHost.imageComponent
             if (component && component.status === Component.Ready) {
-                // Create with explicit dimensions to avoid size issues
-                // Set initial position/scale based on transition type
-                var initialX = (imageStack.transitionType === 1) ? imageStack.width : 0
-                var initialScale = (imageStack.transitionType === 2) ? 0.8 : 1.0
                 var imageOrientation = orientation !== undefined ? orientation : 0
                 
                 // CRITICAL FIX: Calculate sourceSize limit based on screen resolution (Qt official best practice)
                 // This limits the decoded image resolution, reducing memory usage by 50-75%
                 // Formula: screen resolution + 20% margin for quality (handles scaling and rotation)
-                var screenWidth = imageStack.width || 1920  // Fallback to 1920 if not available
-                var screenHeight = imageStack.height || 1080  // Fallback to 1080 if not available
+                var screenWidth = imageHost.width || 1920  // Fallback to 1920 if not available
+                var screenHeight = imageHost.height || 1080  // Fallback to 1080 if not available
                 // Add 20% margin for quality (handles imageScale > 100%, rotations, and high-DPI displays)
                 var maxWidth = Math.ceil(screenWidth * 1.2)
                 var maxHeight = Math.ceil(screenHeight * 1.2)
                 var sourceSizeLimit = Qt.size(maxWidth, maxHeight)
                 
-                imageStack.pendingImage = component.createObject(imageStack, {
+                imageHost.slideImageInstance = component.createObject(imageHost, {
                     "source": dataUrl,
                     "fillMode": root.configuration.FillMode,
                     "color": root.configuration.Color,
@@ -2709,22 +2676,19 @@ WallpaperItem {
                     "imageScale": root.configuration.ImageScale,
                     "orientation": imageOrientation,
                     "sourceSizeLimit": sourceSizeLimit,  // NEW: Limit decoded resolution
-                    "width": imageStack.width,
-                    "height": imageStack.height,
-                    "x": initialX,
-                    "scale": initialScale
+                    "width": imageHost.width,
+                    "height": imageHost.height,
+                    "x": 0,
+                    "scale": 1.0
                 })
                 
-                if (imageStack.pendingImage) {
-                    // Connect to statusChanged to replace when loaded
-                    // Note: statusChanged signal is automatically available via property alias
-                    if (imageStack.pendingImage.statusChanged) {
-                        imageStack.pendingImage.statusChanged.connect(imageStack.replaceWhenLoaded)
+                if (imageHost.slideImageInstance) {
+                    if (imageHost.slideImageInstance.statusChanged) {
+                        imageHost.slideImageInstance.statusChanged.connect(imageHost.onSlideImageStatusChanged)
                     } else {
                         console.warn("statusChanged signal not available!")
                     }
-                    // Try to replace immediately (will wait if still loading)
-                    imageStack.replaceWhenLoaded()
+                    imageHost.onSlideImageStatusChanged()
                 } else {
                     console.error("Failed to create image component:", component ? component.errorString() : "component is null")
                     root.loading = false
@@ -2733,7 +2697,7 @@ WallpaperItem {
                     console.error("Image component not ready. Status:", component ? component.status : "null", "Error:", component ? component.errorString() : "component is null")
                     // Fallback: try to create component on the fly
                     if (!component || component.status === Component.Error) {
-                        imageStack.imageComponent = Qt.createComponent("ImageComponent.qml", imageStack)
+                        imageHost.imageComponent = Qt.createComponent("ImageComponent.qml", imageHost)
                     }
                     root.loading = false
                 }
@@ -2804,7 +2768,7 @@ WallpaperItem {
         }
     }
 
-    // Main image view with carousel transitions
+    // Main image view (single slide surface, no transitions)
     Item {
         id: imageContainer
         anchors.fill: parent
@@ -2815,41 +2779,19 @@ WallpaperItem {
             color: root.configuration.Color
         }
         
-        // Image stack for smooth transitions (following KDE official pattern)
-        // Note: StackView depth property is read-only and indicates current stack depth
-        // With replace(), depth should be 1-2 (current + new during transition)
-        // onDeactivated destroys items immediately when deactivated (memory management)
-        QQC2.StackView {
-            id: imageStack
+        // Single image host: one ImageComponent child at a time (no StackView, no transitions)
+        Item {
+            id: imageHost
             anchors.fill: parent
             
-            // Monitor depth for safety (following Qt/KDE best practices)
-            // With replace(), depth should never exceed 2-3 even during transitions
-            // Only log warnings for problematic depths to reduce log verbosity
-            onDepthChanged: {
-                if (depth > 3) {
-                    console.warn("⚠️  StackView depth exceeded expected limit:", depth, "- possible memory leak!")
-                }
-            }
-            
-            // Properties for transition configuration
-            property int transitionDuration: root.configuration.TransitionDuration || 1000
-            property int transitionType: 0  // Will be set based on TransitionRandom or TransitionType
-            // Skip animation if transitions are disabled or if it's the first image
-            property bool doesSkipAnimation: !root.configuration.TransitionEnabled || (currentItem === undefined)
-            
-            // Pending image (loaded in background before replacing)
-            property Item pendingImage: null
-            
-            // Component for creating image items (lazy loading)
             property Component imageComponent: null
+            property Item slideImageInstance: null
             
             Component.onCompleted: {
-                imageComponent = Qt.createComponent("ImageComponent.qml", imageStack)
+                imageComponent = Qt.createComponent("ImageComponent.qml", imageHost)
                 if (imageComponent.status === Component.Error) {
                     console.error("Failed to load ImageComponent:", imageComponent.errorString())
                 } else if (imageComponent.status !== Component.Ready) {
-                    // Wait for component to be ready
                     imageComponent.statusChanged.connect(function() {
                         if (imageComponent.status === Component.Error) {
                             console.error("ImageComponent failed to load:", imageComponent.errorString())
@@ -2858,164 +2800,28 @@ WallpaperItem {
                 }
             }
             
-            // Transition configuration based on TransitionType
-            // Following KDE pattern with support for Fade, Slide, and Zoom transitions
-            // Note: Cannot use conditional animations inside Transition
-            // Solution: Set initial properties in ImageComponent based on transitionType, then animate all properties
-            replaceEnter: Transition {
-                id: replaceEnterTransition
-                enabled: !imageStack.doesSkipAnimation
-                
-                // Parallel animation for combining multiple effects
-                ParallelAnimation {
-                    // Fade transition (always active for all types)
-                    OpacityAnimator {
-                        id: replaceEnterOpacityAnimator
-                        from: 0
-                        to: 1
-                        duration: imageStack.transitionDuration
+            function destroyCurrentSlideImage() {
+                if (slideImageInstance) {
+                    if (slideImageInstance.statusChanged) {
+                        slideImageInstance.statusChanged.disconnect(onSlideImageStatusChanged)
                     }
-                    
-                    // Slide transition (type 1) - horizontal slide in from right
-                    // Animate x only if transition type is Slide (initial x set in ImageComponent)
-                    PropertyAnimation {
-                        property: "x"
-                        from: imageStack.transitionType === 1 ? imageStack.width : 0
-                        to: 0
-                        duration: imageStack.transitionDuration
-                    }
-                    
-                    // Zoom transition (type 2) - zoom in from 0.8 to 1.0
-                    // Animate scale only if transition type is Zoom (initial scale set in ImageComponent)
-                    PropertyAnimation {
-                        property: "scale"
-                        from: imageStack.transitionType === 2 ? 0.8 : 1.0
-                        to: 1.0
-                        duration: imageStack.transitionDuration
-                    }
+                    slideImageInstance.destroy()
+                    slideImageInstance = null
                 }
             }
             
-            // Keep old image until new one is fully visible (prevents background showing through)
-            // Following KDE pattern: PauseAnimation keeps old image visible during enter transition
-            replaceExit: Transition {
-                // Parallel animation for exit effects
-                ParallelAnimation {
-                    // Pause to keep old image visible during enter transition
-                    PauseAnimation {
-                        // 100ms buffer to ensure smooth transition
-                        duration: replaceEnterOpacityAnimator.duration + 100
-                    }
-                    
-                    // Fade out old image (always active)
-                    OpacityAnimator {
-                        from: 1
-                        to: 0
-                        duration: imageStack.transitionDuration
-                    }
-                    
-                    // Slide out (type 1) - horizontal slide out to left
-                    PropertyAnimation {
-                        property: "x"
-                        from: 0
-                        to: imageStack.transitionType === 1 ? -imageStack.width : 0
-                        duration: imageStack.transitionDuration
-                    }
-                    
-                    // Zoom out (type 2) - zoom out from 1.0 to 1.2
-                    PropertyAnimation {
-                        property: "scale"
-                        from: 1.0
-                        to: imageStack.transitionType === 2 ? 1.2 : 1.0
-                        duration: imageStack.transitionDuration
-                    }
-                }
-            }
-            
-            // Function to replace image when loaded (following KDE pattern)
-            function replaceWhenLoaded() {
-                if (!pendingImage) {
+            function onSlideImageStatusChanged() {
+                if (!slideImageInstance) {
                     return
                 }
-                
-                // Wait for image to finish loading
-                if (pendingImage.status === Image.Loading) {
+                if (slideImageInstance.status === Image.Loading) {
                     return
                 }
-                
-                // Disconnect statusChanged signal
-                pendingImage.statusChanged.disconnect(replaceWhenLoaded)
-                
-                // Cleanup old image when removed (memory management)
-                // Store reference to avoid null errors
-                // Use flag to prevent double destruction (both onDeactivated and onRemoved may be called)
-                var imageToCleanup = pendingImage
-                var isDestroyed = false  // Flag to prevent double destruction
-                
-                imageToCleanup.QQC2.StackView.onDeactivated.connect(function() {
-                    if (imageToCleanup && !isDestroyed) {
-                        isDestroyed = true
-                        imageToCleanup.destroy()
-                    }
-                })
-                imageToCleanup.QQC2.StackView.onRemoved.connect(function() {
-                    if (imageToCleanup && !isDestroyed) {
-                        isDestroyed = true
-                        imageToCleanup.destroy()
-                    }
-                })
-                
-                // Replace with transition
-                // Following KDE official pattern: replace() maintains only 1-2 items during transitions
-                // onDeactivated destroys immediately when item is deactivated (memory management)
-                
-                // Safety check: if depth is unexpectedly high, log warning
-                // With replace(), depth should be 1-2 (current + new during transition)
-                if (imageStack.depth > 3) {
-                    console.warn("⚠️  StackView depth is unexpectedly high:", imageStack.depth, "- this may indicate a memory issue")
-                }
-                
-                imageStack.replace(pendingImage, {}, QQC2.StackView.Transition)
-                
+                slideImageInstance.statusChanged.disconnect(onSlideImageStatusChanged)
                 root.loading = false
-                
-                // Handle errors
-                if (pendingImage.status !== Image.Ready) {
-                    console.warn("Image failed to load, status:", pendingImage.status)
+                if (slideImageInstance.status !== Image.Ready) {
+                    console.warn("Image failed to load, status:", slideImageInstance.status)
                 }
-                
-                var tempPending = pendingImage
-                pendingImage = null
-                
-                // CRITICAL: Force aggressive cleanup of old StackView items after transition
-                // This ensures old images are properly destroyed and memory is released immediately
-                // Use multiple delayed cleanups to give GC time to work
-                Qt.callLater(function() {
-                    // StackView should only have 1-2 items (current + maybe one in transition)
-                    var currentDepth = imageStack.depth
-                    
-                    // Only log warnings for problematic depths to reduce log verbosity
-                    if (currentDepth > 2) {
-                        console.warn("⚠️  StackView depth still high after cleanup:", currentDepth, "- possible memory leak")
-                        console.warn("⚠️  Consider restarting plasmashell if memory usage is high")
-                    }
-                    
-                    // Second cleanup after transition completes (give time for GC)
-                    // This helps release memory from completed transitions
-                    Qt.callLater(function() {
-                        // Force cleanup of any remaining references
-                        if (tempPending) {
-                            tempPending = null
-                        }
-                    })
-                })
-                
-                // Verify the item is actually in the StackView (only log errors)
-                Qt.callLater(function() {
-                    if (!imageStack.currentItem) {
-                        console.error("StackView currentItem is null after replace!")
-                    }
-                })
             }
         }
         
@@ -3409,21 +3215,6 @@ WallpaperItem {
                 exifHideTimer.interval = root.configuration.ExifInfoDuration * 1000
                 exifHideTimer.restart()
             }
-        }
-            function onTransitionEnabledChanged() {
-                imageStack.doesSkipAnimation = !root.configuration.TransitionEnabled
-            }
-            function onTransitionRandomChanged() {
-                // Transition type will be determined on next image load
-            }
-            function onTransitionTypeChanged() {
-                // Only update if random is disabled
-                if (!root.configuration.TransitionRandom) {
-                    imageStack.transitionType = root.configuration.TransitionType || 0
-                }
-            }
-        function onTransitionDurationChanged() {
-            imageStack.transitionDuration = root.configuration.TransitionDuration || 1000
         }
     }
 }

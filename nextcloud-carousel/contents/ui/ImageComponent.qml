@@ -7,16 +7,13 @@ import QtQuick
 import QtQuick.Controls as QQC2
 
 /**
- * Image component for StackView transitions
+ * Slide image item (single instance on imageHost; no StackView transitions)
  * Based on KDE's StaticImageComponent pattern
  */
 Item {
     id: imageComponent
     
-    // Note: Do NOT use anchors.fill here - StackView manages anchors automatically
-    // Using anchors here causes "conflicting anchors" error
-    // StackView will set width/height automatically when item is added
-    // Use parent dimensions as fallback (parent is the StackView when item is added)
+    // Parent is imageHost Item: width/height come from createObject; no anchors.fill on this root
     width: parent ? parent.width : 0
     height: parent ? parent.height : 0
     

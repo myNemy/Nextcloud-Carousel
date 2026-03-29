@@ -9,12 +9,15 @@
 #include <QObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
-#include <QTemporaryFile>
 #include <QUrl>
 #include <QHash>
+#include <QList>
 #include <QMutex>
 #include <QVariantMap>
 #include <QPointer>
+#include <QFile>
+#include <QTimer>
+#include <memory>
 
 /**
  * NextcloudDownloader - Livello 1: Gestisce solo il download da Nextcloud
@@ -53,8 +56,8 @@ public:
     Q_INVOKABLE void clearCache();
     
     /**
-     * Pulisce i file vecchi (non in cache, più vecchi di 1 ora)
-     * Chiamato automaticamente dopo ogni download
+     * Rimuove file orfani su disco (non più referenziati dalla LRU in RAM) e .part abbandonati.
+     * Chiamata anche all'avvio e su timer; dopo ogni download (con throttle).
      */
     Q_INVOKABLE void cleanupOldFiles();
 
@@ -97,19 +100,43 @@ signals:
      */
     void downloadFailed(const QString &url, const QString &errorString);
 
-private slots:
-    void downloadFinished(QNetworkReply *reply);
-
 private:
+    /** Per-reply download state: stream network bytes to disk (Qt: QNetworkReply as QIODevice, readyRead). */
+    struct PendingDownload {
+        QString originalUrl;
+        int maxSizeMB = 30;
+        std::unique_ptr<QFile> file;
+        QString filePath;
+        qint64 bytesWritten = 0;
+    };
+
+    void onDownloadReadyRead(QNetworkReply *reply);
+    void onDownloadFinished(QNetworkReply *reply);
+    void failPendingDownload(QNetworkReply *reply, const QString &errorString);
+
+    qint64 maxSizeBytesForMb(int maxSizeMB) const;
+    static QString extensionFromContentType(const QString &contentType);
+    void insertCacheEntryAndEvict(const QString &cacheKey, const QString &filePath);
+    void touchCacheKeyUnlocked(const QString &cacheKey);
+    void removeCacheEntryUnlocked(const QString &cacheKey);
+
     QNetworkAccessManager *m_networkManager;
-    QHash<QString, QString> m_cache;  // URL -> temp file path
-    QHash<QNetworkReply*, QString> m_downloads;  // Reply -> URL
-    QHash<QNetworkReply*, int> m_downloadMaxSizes;  // Reply -> maxSizeMB
+    QHash<QString, QString> m_cache;       // cacheKey -> temp file path
+    QList<QString> m_cacheLruOrder;        // front = LRU for eviction (see Qt cache patterns + project memory rules)
+    QHash<QNetworkReply*, PendingDownload*> m_pending;  // active streaming downloads
+
     QMutex m_mutex;
     QString m_tempDir;
 
-    QString createTempFile(const QByteArray &data, const QString &extension);
     QString getCacheKey(const QString &url);
+
+    /** Disk sweep: orphans not in m_cache, stale .part; optional emergency trim of young orphans. */
+    void performOrphanSweep(bool bypassThrottle);
+
+    QTimer *m_orphanSweepTimer = nullptr;
+    qint64 m_lastOrphanSweepMs = 0;
+
+    static constexpr int kMaxCachedImageFiles = 48;
 };
 
 #endif // NEXTCLOUDDOWNLOADER_H

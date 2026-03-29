@@ -18,6 +18,9 @@
 #include <QVariantMap>
 #include <QStringList>
 #include <QList>
+#include <QUuid>
+#include <algorithm>
+#include <memory>
 
 NextcloudDownloader::NextcloudDownloader(QObject *parent)
     : QObject(parent)
@@ -27,31 +30,52 @@ NextcloudDownloader::NextcloudDownloader(QObject *parent)
     
     m_networkManager = new QNetworkAccessManager(this);
     
-    // Create temp directory in user cache
+    // Create temp directory in user cache (QStandardPaths: CacheLocation — Qt doc)
     QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     m_tempDir = cacheDir + "/nextcloud-carousel";
     QDir().mkpath(m_tempDir);
-    
-    connect(m_networkManager, &QNetworkAccessManager::finished,
-            this, &NextcloudDownloader::downloadFinished);
+
+    // Orphans on disk are invisible to m_cache after restart; sweep must not depend only on new downloads.
+    m_orphanSweepTimer = new QTimer(this);
+    m_orphanSweepTimer->setInterval(4 * 60 * 1000);
+    connect(m_orphanSweepTimer, &QTimer::timeout, this, [this]() {
+        performOrphanSweep(false);
+    });
+    m_orphanSweepTimer->start();
+    QTimer::singleShot(0, this, [this]() {
+        performOrphanSweep(true);
+    });
 }
 
 NextcloudDownloader::~NextcloudDownloader()
 {
-    // Cancel any pending downloads
+    QList<QNetworkReply *> replies;
+    QList<PendingDownload *> pendings;
     {
         QMutexLocker locker(&m_mutex);
-        for (QNetworkReply *reply : m_downloads.keys()) {
-            if (reply) {
-                reply->abort();
-                reply->deleteLater();
-            }
+        for (auto it = m_pending.constBegin(); it != m_pending.constEnd(); ++it) {
+            replies.append(it.key());
+            pendings.append(it.value());
         }
-        m_downloads.clear();
-        m_downloadMaxSizes.clear();
+        m_pending.clear();
+    }
+    for (PendingDownload *pd : pendings) {
+        if (!pd) {
+            continue;
+        }
+        if (pd->file) {
+            pd->file->close();
+        }
+        QFile::remove(pd->filePath);
+        delete pd;
+    }
+    for (QNetworkReply *reply : replies) {
+        if (reply) {
+            reply->abort();
+            reply->deleteLater();
+        }
     }
     
-    // Cleanup temp files
     clearCache();
 }
 
@@ -68,14 +92,13 @@ QString NextcloudDownloader::downloadImage(const QString &url,
         if (m_cache.contains(cacheKey)) {
             QString filePath = m_cache.value(cacheKey);
             if (QFileInfo::exists(filePath)) {
+                touchCacheKeyUnlocked(cacheKey);
                 qDebug() << "✅ NextcloudDownloader: Image already cached:" << filePath;
-                return filePath;  // Return local file path directly
-            } else {
-                // File was deleted, remove from cache
-                m_cache.remove(cacheKey);
+                return filePath;
             }
+            removeCacheEntryUnlocked(cacheKey);
         }
-    }  // Release lock before network call
+    }
     
     // Start download (must be in main thread)
     QUrl qurl(url);
@@ -95,116 +118,257 @@ QString NextcloudDownloader::downloadImage(const QString &url,
     
     QNetworkReply *reply = m_networkManager->get(request);
     
-    // Set timeout using QTimer (Qt 6 approach)
-    // Note: QNetworkReply doesn't have direct timeout, but we can abort after timeout
-    // Use QPointer to safely handle object destruction before timeout fires
+    // Stream to disk: QNetworkReply is a sequential QIODevice; readyRead + finished (Qt 6 doc).
+    const QString partPath = m_tempDir + "/img_" + QUuid::createUuid().toString(QUuid::WithoutBraces) + QStringLiteral(".part");
+    auto *pd = new PendingDownload;
+    pd->originalUrl = url;
+    pd->maxSizeMB = maxSizeMB;
+    pd->filePath = partPath;
+    pd->file = std::make_unique<QFile>(partPath);
+    if (!pd->file->open(QIODevice::WriteOnly)) {
+        qWarning() << "❌ NextcloudDownloader: Cannot open temp file for write:" << partPath;
+        delete pd;
+        reply->abort();
+        reply->deleteLater();
+        emit downloadFailed(url, QStringLiteral("Failed to create temporary file"));
+        return QString();
+    }
+    
+    {
+        QMutexLocker locker(&m_mutex);
+        m_pending.insert(reply, pd);
+    }
+    
+    connect(reply, &QNetworkReply::readyRead, this, [this, reply]() {
+        onDownloadReadyRead(reply);
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        onDownloadFinished(reply);
+    });
+    
     QPointer<QNetworkReply> replyPtr(reply);
     QPointer<NextcloudDownloader> selfPtr(this);
     QTimer::singleShot(60000, reply, [replyPtr, selfPtr, url]() {
-        // Check if objects are still valid before accessing them
-        if (!selfPtr) {
-            // NextcloudDownloader was destroyed, nothing to do
-            return;
-        }
-        if (!replyPtr) {
-            // Reply was already destroyed, nothing to do
+        if (!selfPtr || !replyPtr) {
             return;
         }
         if (replyPtr->isRunning()) {
             qWarning() << "⏱️  NextcloudDownloader: Download timeout for" << url;
             replyPtr->abort();
-            // The downloadFinished slot will handle cleanup via downloadFailed signal
         }
     });
     
-    // Add to downloads (with lock)
-    {
-        QMutexLocker locker(&m_mutex);
-        m_downloads[reply] = url;  // Store original URL, not cacheKey
-        m_downloadMaxSizes[reply] = maxSizeMB;  // Store max size limit for this download
-    }
-    
-    qDebug() << "⏳ NextcloudDownloader: Starting download for" << url;
-    // Return empty string - will be updated when download finishes via signal
-    return "";
+    qDebug() << "⏳ NextcloudDownloader: Starting streaming download for" << url;
+    return QString();
 }
 
-void NextcloudDownloader::downloadFinished(QNetworkReply *reply)
+qint64 NextcloudDownloader::maxSizeBytesForMb(int maxSizeMB) const
 {
-    // Protect access to m_downloads with mutex (thread safety)
+    if (maxSizeMB > 0) {
+        return static_cast<qint64>(maxSizeMB) * 1024 * 1024;
+    }
+    return static_cast<qint64>(30) * 1024 * 1024;
+}
+
+QString NextcloudDownloader::extensionFromContentType(const QString &contentType)
+{
+    const QString ct = contentType.toLower();
+    if (ct.contains(QLatin1String("png"))) {
+        return QStringLiteral("png");
+    }
+    if (ct.contains(QLatin1String("webp"))) {
+        return QStringLiteral("webp");
+    }
+    if (ct.contains(QLatin1String("gif"))) {
+        return QStringLiteral("gif");
+    }
+    if (ct.contains(QLatin1String("tiff")) || ct.contains(QLatin1String("tif"))) {
+        return QStringLiteral("tiff");
+    }
+    return QStringLiteral("jpg");
+}
+
+void NextcloudDownloader::onDownloadReadyRead(QNetworkReply *reply)
+{
+    const QByteArray chunk = reply->readAll();
+    if (chunk.isEmpty()) {
+        return;
+    }
+    
+    QMutexLocker locker(&m_mutex);
+    PendingDownload *pd = m_pending.value(reply, nullptr);
+    if (!pd || !pd->file || !pd->file->isOpen()) {
+        return;
+    }
+    const qint64 maxB = maxSizeBytesForMb(pd->maxSizeMB);
+    const qint64 newTotal = pd->bytesWritten + chunk.size();
+    if (newTotal > maxB) {
+        const int mbLimit = pd->maxSizeMB;
+        locker.unlock();
+        failPendingDownload(reply, QStringLiteral("Image too large (max %1 MB)").arg(mbLimit));
+        return;
+    }
+    const qint64 w = pd->file->write(chunk);
+    if (w != chunk.size()) {
+        locker.unlock();
+        failPendingDownload(reply, QStringLiteral("Write error while saving download"));
+        return;
+    }
+    pd->bytesWritten = newTotal;
+}
+
+void NextcloudDownloader::failPendingDownload(QNetworkReply *reply, const QString &errorString)
+{
     QString originalUrl;
-    int maxSizeMB = 30;  // Default if not found
     {
         QMutexLocker locker(&m_mutex);
-        if (!m_downloads.contains(reply)) {
-            // Reply not in our tracking - might have been cancelled
-            reply->deleteLater();
-            return;
+        PendingDownload *pd = m_pending.take(reply);
+        if (pd) {
+            originalUrl = pd->originalUrl;
+            if (pd->file) {
+                pd->file->close();
+            }
+            QFile::remove(pd->filePath);
+            delete pd;
         }
-        originalUrl = m_downloads.take(reply);
-        maxSizeMB = m_downloadMaxSizes.value(reply, 30);  // Get max size limit (default 30MB)
-        m_downloadMaxSizes.remove(reply);  // Remove from tracking
     }
+    if (!originalUrl.isEmpty()) {
+        qWarning() << "❌ NextcloudDownloader:" << errorString << "for" << originalUrl;
+        emit downloadFailed(originalUrl, errorString);
+    }
+    if (reply && reply->isRunning()) {
+        reply->abort();
+    }
+}
+
+void NextcloudDownloader::onDownloadFinished(QNetworkReply *reply)
+{
+    const QByteArray remainder = reply->readAll();
+    
+    PendingDownload *pd = nullptr;
+    {
+        QMutexLocker locker(&m_mutex);
+        pd = m_pending.take(reply);
+    }
+    
+    if (!pd) {
+        reply->deleteLater();
+        return;
+    }
+    
+    const QString originalUrl = pd->originalUrl;
     
     if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "❌ NextcloudDownloader: Download failed for" << originalUrl 
-                   << ":" << reply->errorString();
-        emit downloadFailed(originalUrl, reply->errorString());
-        reply->deleteLater();
-        return;
-    }
-    
-    // Read data and headers BEFORE deleteLater() (reply will be deleted)
-    QByteArray data = reply->readAll();
-    
-    // Check image size limit (same as QML MaxImageSizeMB check)
-    // Default: 30MB if not specified, but QML will pass the configured limit
-    qint64 maxSizeBytes = (maxSizeMB > 0) ? (static_cast<qint64>(maxSizeMB) * 1024 * 1024) : (30 * 1024 * 1024);
-    if (data.size() > maxSizeBytes) {
-        qWarning() << "⚠️  NextcloudDownloader: Image too large (" << (data.size() / 1024 / 1024) 
-                   << "MB) for" << originalUrl << "- skipping (limit:" << maxSizeMB << "MB)";
-        emit downloadFailed(originalUrl, QString("Image too large (%1 MB, max %2 MB)").arg(data.size() / 1024 / 1024).arg(maxSizeMB));
-        reply->deleteLater();
-        return;
-    }
-    
-    QString extension = "jpg";
-    QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
-    if (contentType.contains("png")) extension = "png";
-    else if (contentType.contains("webp")) extension = "webp";
-    else if (contentType.contains("gif")) extension = "gif";
-    else if (contentType.contains("tiff") || contentType.contains("tif")) extension = "tiff";
-    
-    // Now safe to delete reply
-    reply->deleteLater();
-    
-    if (originalUrl.isEmpty()) {
-        return;
-    }
-    
-    // Create temp file
-    QString filePath = createTempFile(data, extension);
-    
-    if (!filePath.isEmpty()) {
-        QString cacheKey = getCacheKey(originalUrl);
-        {
-            QMutexLocker locker(&m_mutex);
-            m_cache[cacheKey] = filePath;
-        }  // Release lock BEFORE emitting signal to avoid potential deadlock
-        qDebug() << "✅ NextcloudDownloader: Image downloaded and saved to" << filePath;
-        
-        // Periodic cleanup of old files (every 10 downloads to avoid overhead)
-        static int downloadCount = 0;
-        downloadCount++;
-        if (downloadCount >= 10) {
-            downloadCount = 0;
-            cleanupOldFiles();
+        if (pd->file) {
+            pd->file->close();
         }
-        
-        emit imageDownloaded(filePath, originalUrl);
-    } else {
-        qWarning() << "❌ NextcloudDownloader: Failed to create temp file for" << originalUrl;
-        emit downloadFailed(originalUrl, "Failed to create temporary file");
+        QFile::remove(pd->filePath);
+        delete pd;
+        reply->deleteLater();
+        qWarning() << "❌ NextcloudDownloader: Download failed for" << originalUrl << ":" << reply->errorString();
+        emit downloadFailed(originalUrl, reply->errorString());
+        return;
+    }
+    
+    if (!remainder.isEmpty()) {
+        const qint64 maxB = maxSizeBytesForMb(pd->maxSizeMB);
+        if (pd->bytesWritten + remainder.size() > maxB) {
+            if (pd->file) {
+                pd->file->close();
+            }
+            QFile::remove(pd->filePath);
+            delete pd;
+            reply->deleteLater();
+            emit downloadFailed(originalUrl, QStringLiteral("Image too large (max %1 MB)").arg(pd->maxSizeMB));
+            return;
+        }
+        if (pd->file->write(remainder) != remainder.size()) {
+            if (pd->file) {
+                pd->file->close();
+            }
+            QFile::remove(pd->filePath);
+            delete pd;
+            reply->deleteLater();
+            emit downloadFailed(originalUrl, QStringLiteral("Write error while saving download"));
+            return;
+        }
+        pd->bytesWritten += remainder.size();
+    }
+    
+    if (pd->file) {
+        pd->file->flush();
+        pd->file->close();
+    }
+    
+    const qint64 maxB = maxSizeBytesForMb(pd->maxSizeMB);
+    if (pd->bytesWritten > maxB) {
+        QFile::remove(pd->filePath);
+        delete pd;
+        reply->deleteLater();
+        emit downloadFailed(originalUrl, QStringLiteral("Image too large (max %1 MB)").arg(pd->maxSizeMB));
+        return;
+    }
+    
+    QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
+    const QString ext = extensionFromContentType(contentType);
+    QString finalPath = pd->filePath;
+    if (pd->filePath.endsWith(QLatin1String(".part"))) {
+        const QString renamed = pd->filePath.chopped(5) + QLatin1Char('.') + ext;
+        if (QFile::rename(pd->filePath, renamed)) {
+            finalPath = renamed;
+        }
+    }
+    
+    reply->deleteLater();
+    delete pd;
+    
+    const QString cacheKey = getCacheKey(originalUrl);
+    insertCacheEntryAndEvict(cacheKey, finalPath);
+    
+    qDebug() << "✅ NextcloudDownloader: Image streamed to" << finalPath;
+
+    performOrphanSweep(false);
+
+    emit imageDownloaded(finalPath, originalUrl);
+}
+
+void NextcloudDownloader::insertCacheEntryAndEvict(const QString &cacheKey, const QString &filePath)
+{
+    QMutexLocker locker(&m_mutex);
+    if (m_cache.contains(cacheKey)) {
+        removeCacheEntryUnlocked(cacheKey);
+    }
+    while (m_cache.size() >= kMaxCachedImageFiles) {
+        if (!m_cacheLruOrder.isEmpty()) {
+            const QString victimKey = m_cacheLruOrder.first();
+            removeCacheEntryUnlocked(victimKey);
+            continue;
+        }
+        if (!m_cache.isEmpty()) {
+            removeCacheEntryUnlocked(m_cache.constBegin().key());
+            continue;
+        }
+        break;
+    }
+    m_cache.insert(cacheKey, filePath);
+    touchCacheKeyUnlocked(cacheKey);
+}
+
+void NextcloudDownloader::touchCacheKeyUnlocked(const QString &cacheKey)
+{
+    if (!m_cache.contains(cacheKey)) {
+        return;
+    }
+    m_cacheLruOrder.removeAll(cacheKey);
+    m_cacheLruOrder.append(cacheKey);
+}
+
+void NextcloudDownloader::removeCacheEntryUnlocked(const QString &cacheKey)
+{
+    const QString path = m_cache.take(cacheKey);
+    m_cacheLruOrder.removeAll(cacheKey);
+    if (!path.isEmpty()) {
+        QFile::remove(path);
     }
 }
 
@@ -212,20 +376,6 @@ QString NextcloudDownloader::getCacheKey(const QString &url)
 {
     // Use URL as cache key (simple approach)
     return QString::fromUtf8(QUrl::toPercentEncoding(url));
-}
-
-QString NextcloudDownloader::createTempFile(const QByteArray &data, const QString &extension)
-{
-    QTemporaryFile tempFile(m_tempDir + "/img_XXXXXX." + extension);
-    tempFile.setAutoRemove(false);  // Keep file until explicit cleanup
-    
-    if (tempFile.open()) {
-        tempFile.write(data);
-        tempFile.close();
-        return tempFile.fileName();
-    }
-    
-    return QString();
 }
 
 void NextcloudDownloader::clearCache()
@@ -238,53 +388,104 @@ void NextcloudDownloader::clearCache()
     }
     
     m_cache.clear();
+    m_cacheLruOrder.clear();
     qDebug() << "🧹 NextcloudDownloader: Cache cleared";
 }
 
 void NextcloudDownloader::cleanupOldFiles()
 {
-    // Cleanup files older than 1 hour that are not in active cache
+    performOrphanSweep(false);
+}
+
+void NextcloudDownloader::performOrphanSweep(bool bypassThrottle)
+{
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (!bypassThrottle) {
+        constexpr qint64 kMinIntervalMs = 30 * 1000;
+        if (m_lastOrphanSweepMs != 0 && (nowMs - m_lastOrphanSweepMs) < kMinIntervalMs) {
+            return;
+        }
+    }
+    m_lastOrphanSweepMs = nowMs;
+
     QDir cacheDir(m_tempDir);
     if (!cacheDir.exists()) {
         return;
     }
-    
-    QDateTime cutoffTime = QDateTime::currentDateTime().addSecs(-3600);  // 1 hour ago
-    
-    QMutexLocker locker(&m_mutex);
+
     QSet<QString> activeFiles;
-    for (const QString &filePath : m_cache.values()) {
-        activeFiles.insert(filePath);
+    {
+        QMutexLocker locker(&m_mutex);
+        for (const QString &filePath : m_cache.values()) {
+            activeFiles.insert(filePath);
+        }
     }
-    
-    // Find all image files in temp directory
+
+    // Orphans: not referenced by in-memory LRU (e.g. after eviction, crash, or plasmashell restart).
+    const QDateTime orphanCutoff = QDateTime::currentDateTime().addSecs(-900); // 15 min
+    const QDateTime partCutoff = QDateTime::currentDateTime().addSecs(-3600);   // stale .part
+
     QStringList filters;
-    filters << "*.jpg" << "*.jpeg" << "*.png" << "*.webp" << "*.gif" << "*.tiff";
-    QFileInfoList fileList = cacheDir.entryInfoList(filters, QDir::Files);
-    
+    filters << QStringLiteral("*.jpg") << QStringLiteral("*.jpeg") << QStringLiteral("*.png")
+            << QStringLiteral("*.webp") << QStringLiteral("*.gif") << QStringLiteral("*.tiff")
+            << QStringLiteral("*.part");
+
+    const QFileInfoList fileList = cacheDir.entryInfoList(filters, QDir::Files);
+
     int removedCount = 0;
     qint64 freedSpace = 0;
-    
+
+    QVector<QPair<QDateTime, QString>> youngOrphans;
+    youngOrphans.reserve(64);
+
     for (const QFileInfo &fileInfo : fileList) {
-        QString filePath = fileInfo.absoluteFilePath();
-        
-        // Skip if file is in active cache
+        const QString filePath = fileInfo.absoluteFilePath();
         if (activeFiles.contains(filePath)) {
             continue;
         }
-        
-        // Remove if older than 1 hour
-        if (fileInfo.lastModified() < cutoffTime) {
-            qint64 size = fileInfo.size();
+
+        if (filePath.endsWith(QLatin1String(".part"))) {
+            if (fileInfo.lastModified() < partCutoff) {
+                const qint64 size = fileInfo.size();
+                if (QFile::remove(filePath)) {
+                    removedCount++;
+                    freedSpace += size;
+                }
+            }
+            continue;
+        }
+
+        if (fileInfo.lastModified() < orphanCutoff) {
+            const qint64 size = fileInfo.size();
             if (QFile::remove(filePath)) {
+                removedCount++;
+                freedSpace += size;
+            }
+        } else {
+            youngOrphans.append({fileInfo.lastModified(), filePath});
+        }
+    }
+
+    // If many fresh orphans pile up (burst of unique URLs), trim oldest by mtime regardless of age.
+    constexpr int kMaxYoungOrphans = kMaxCachedImageFiles * 3;
+    if (youngOrphans.size() > kMaxYoungOrphans) {
+        std::sort(youngOrphans.begin(), youngOrphans.end(), [](const auto &a, const auto &b) {
+            return a.first < b.first;
+        });
+        const int toRemove = static_cast<int>(youngOrphans.size()) - kMaxCachedImageFiles;
+        for (int i = 0; i < toRemove; ++i) {
+            const QString &p = youngOrphans.at(i).second;
+            const QFileInfo fi(p);
+            const qint64 size = fi.size();
+            if (QFile::remove(p)) {
                 removedCount++;
                 freedSpace += size;
             }
         }
     }
-    
+
     if (removedCount > 0) {
-        qDebug() << "🧹 NextcloudDownloader: Cleaned up" << removedCount << "old files, freed" 
+        qDebug() << "🧹 NextcloudDownloader: Orphan sweep removed" << removedCount << "file(s), freed"
                  << (freedSpace / 1024 / 1024) << "MB";
     }
 }
@@ -295,7 +496,11 @@ bool NextcloudDownloader::isCached(const QString &url)
     QString cacheKey = getCacheKey(url);
     if (m_cache.contains(cacheKey)) {
         QString filePath = m_cache.value(cacheKey);
-        return QFileInfo::exists(filePath);
+        if (QFileInfo::exists(filePath)) {
+            touchCacheKeyUnlocked(cacheKey);
+            return true;
+        }
+        removeCacheEntryUnlocked(cacheKey);
     }
     return false;
 }
@@ -307,11 +512,10 @@ QString NextcloudDownloader::getLocalFilePath(const QString &url)
     if (m_cache.contains(cacheKey)) {
         QString filePath = m_cache.value(cacheKey);
         if (QFileInfo::exists(filePath)) {
+            touchCacheKeyUnlocked(cacheKey);
             return filePath;
-        } else {
-            // File was deleted, remove from cache
-            m_cache.remove(cacheKey);
         }
+        removeCacheEntryUnlocked(cacheKey);
     }
     return QString();
 }

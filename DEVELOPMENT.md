@@ -61,6 +61,18 @@
 
 ---
 
+## ⚠️ Note (2025-03-24): transitions removed
+
+**StackView-based transitions** and all **KConfig keys / UI** for `TransitionDuration`, `TransitionEnabled`, `TransitionRandom`, and `TransitionType` are **gone**. The carousel uses a single **`imageHost`** with at most one **`ImageComponent`**.
+
+Many **later sections** of this file still describe the old transition system in detail (historical). Treat those as **archive**, not as the current design.
+
+### C++ `NextcloudDownloader` (file pipeline, memory)
+
+When `BUILD_IMAGEPROVIDER` is enabled, downloads go **straight to disk**: `QNetworkReply` is a sequential [`QIODevice`](https://doc.qt.io/qt-6/qnetworkreply.html); chunks are appended on `readyRead` / end on `finished` to a `*.part` file under cache, then renamed. This avoids holding the full response in a `QByteArray`. The on-disk image cache is **bounded** (LRU, max 48 files in RAM); eviction deletes the evicted file path. Under Plasma, `QStandardPaths::CacheLocation` is typically `~/.cache/plasmashell/`, so files live under `~/.cache/plasmashell/nextcloud-carousel/`. **Orphan sweep** deletes on-disk files that are no longer referenced by the LRU (e.g. after restart or eviction leaving stray paths): once at startup (queued), every **4 minutes** via timer, and after each completed network download (**30 s** minimum between sweeps). Orphans older than **15 minutes** are removed; if more than **144** younger orphans remain, the oldest by `mtime` are trimmed until at most **48** young orphans remain. Stale `*.part` files older than **1 hour** are removed.
+
+---
+
 ## ✅ Current Status - Working Base
 
 The Nextcloud Carousel plugin has reached a working base with the following features:
@@ -89,9 +101,7 @@ The Nextcloud Carousel plugin has reached a working base with the following feat
 
 4. **Display**
    - ✅ Configurable background color
-   - ✅ **Transitions FULLY IMPLEMENTED** - Fade, Slide, and Zoom transitions working using StackView (KDE official pattern)
-   - ✅ Transition enable/disable control
-   - ✅ Transition randomization (random type per image)
+   - ✅ **Single slide surface** (no StackView transitions; one `ImageComponent` at a time for predictable memory)
    - ✅ FillMode implemented (Stretch, Fit, Crop, Tile) - backend + UI
    - ✅ Blur implemented - simplified (opacity reduction, not true blur) - backend + UI
    - ✅ ImageScale implemented - backend + UI
@@ -111,41 +121,15 @@ The Nextcloud Carousel plugin has reached a working base with the following feat
 
 ## ⚠️ Missing Settings in UI
 
-All major settings are now implemented in both backend and UI. The following are complete:
+All major settings are now implemented in both backend and UI. Transition-related settings (**TransitionDuration**, **TransitionEnabled**, **TransitionRandom**, **TransitionType**) were **removed** from `main.xml` / `config.qml` together with StackView transitions (single-image host only).
 
-1. **TransitionDuration** - ✅ COMPLETE
-   - Fully implemented in UI and backend
-   - Controls fade transition duration between images
-   - Default: 1000ms
-   - Range: 100-10000ms
-
-2. **TransitionEnabled** - ✅ COMPLETE
-   - Fully implemented in UI and backend
-   - CheckBox to enable/disable transitions
-   - When disabled, images change instantly without animation
-   - Default: true
-
-3. **TransitionRandom** - ✅ COMPLETE
-   - Fully implemented in UI and backend
-   - CheckBox to randomize transition type
-   - When enabled, randomly selects Fade/Slide/Zoom for each image
-   - Enabled only when transitions are enabled
-   - Default: false
-
-4. **TransitionType** - ✅ COMPLETE
-   - Fully implemented in UI and backend
-   - ComboBox with Fade/Slide/Zoom options
-   - Used when TransitionRandom is disabled
-   - All three transition types (Fade, Slide, Zoom) working
-   - Default: 0 (Fade)
-
-5. **ShowLoadingIndicator** - ✅ COMPLETE
+1. **ShowLoadingIndicator** - ✅ COMPLETE
    - Fully implemented in UI and backend
    - CheckBox to show/hide loading indicator
    - When disabled, loading indicator is hidden during image loading
    - Default: true
 
-3. **Blur** - Enable/disable blur effect with adjustable opacity
+2. **Blur** - Enable/disable blur effect with adjustable opacity
    - **Complexity:** Low-Medium - Checkbox + Slider
    - **Status:** ✅ COMPLETE - Fully implemented in UI
    - **Current behavior:** 
@@ -160,7 +144,7 @@ All major settings are now implemented in both backend and UI. The following are
      - Slider (0-100%) with label showing current value
      - Slider disabled when blur is off
 
-4. **FillMode** - Image fill mode (Stretch/Fit/Crop/Tile)
+3. **FillMode** - Image fill mode (Stretch/Fit/Crop/Tile)
    - **Complexity:** Medium - ComboBox with 6 options + translations
    - **Status:** ✅ COMPLETE - Fully implemented in UI
    - **Implementation details:**
@@ -180,7 +164,7 @@ All major settings are now implemented in both backend and UI. The following are
      - Property alias cfg_FillMode configured
      - Handler onFillModeChanged implemented
 
-5. **ImageScale** - Image zoom/scale control
+4. **ImageScale** - Image zoom/scale control
    - **Complexity:** Low-Medium - Slider with percentage display
    - **Status:** ✅ COMPLETE - Fully implemented
    - **Implementation details:**

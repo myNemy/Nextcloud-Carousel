@@ -17,10 +17,6 @@ Kirigami.FormLayout {
     property alias cfg_Password: passwordField.text
     property alias cfg_PhotoPath: photoPathField.text
     property alias cfg_SlideInterval: slideIntervalField.text
-    property alias cfg_TransitionDuration: transitionDurationField.text
-    property alias cfg_TransitionEnabled: transitionEnabledCheckBox.checked
-    property alias cfg_TransitionRandom: transitionRandomCheckBox.checked
-    property alias cfg_TransitionType: transitionTypeComboBox.currentIndex
     property alias cfg_RandomOrder: randomOrderComboBox.currentIndex
     property alias cfg_Blur: blurCheckBox.checked
     property alias cfg_BlurOpacity: blurOpacitySlider.value
@@ -44,7 +40,6 @@ Kirigami.FormLayout {
     // Proprietà per sezioni collassabili
     property bool sectionNextcloudExpanded: true
     property bool sectionSlideshowExpanded: true
-    property bool sectionTransitionsExpanded: true
     property bool sectionVisualizationExpanded: true
     property bool sectionOverlayExpanded: true
 
@@ -168,75 +163,7 @@ Kirigami.FormLayout {
     }
 
     // ============================================
-    // SEZIONE 3: TRANSIZIONI
-    // ============================================
-    
-    QtControls2.CheckBox {
-        Kirigami.FormData.isSection: true
-        text: i18n("Transizioni tra Immagini")
-        checked: sectionTransitionsExpanded
-        font.bold: true
-        font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
-        onCheckedChanged: sectionTransitionsExpanded = checked
-    }
-
-    QtControls2.CheckBox {
-        id: transitionEnabledCheckBox
-        Kirigami.FormData.label: i18n("Transizioni:")
-        text: i18n("Abilita transizioni tra immagini")
-        visible: sectionTransitionsExpanded
-        QtControls2.ToolTip.delay: 1000
-        QtControls2.ToolTip.visible: hovered
-        QtControls2.ToolTip.text: i18n("Abilita effetti di transizione fluidi (fade, slide, zoom) quando si cambia immagine\n\nSe disabilitato, le immagini cambiano istantaneamente senza animazione")
-    }
-
-    QtControls2.CheckBox {
-        id: transitionRandomCheckBox
-        Kirigami.FormData.label: i18n("")
-        text: i18n("Randomizza tipo di transizione")
-        visible: sectionTransitionsExpanded
-        enabled: transitionEnabledCheckBox.checked
-        QtControls2.ToolTip.delay: 1000
-        QtControls2.ToolTip.visible: hovered
-        QtControls2.ToolTip.text: i18n("Seleziona casualmente un tipo di transizione diverso per ogni cambio immagine\n\nSe disabilitato, usa sempre il tipo di transizione selezionato sotto")
-    }
-
-    QtControls2.TextField {
-        id: transitionDurationField
-        Kirigami.FormData.label: i18n("Durata Transizione (ms):")
-        placeholderText: i18n("1000")
-        visible: sectionTransitionsExpanded && transitionEnabledCheckBox.checked
-        validator: IntValidator {
-            bottom: 100
-            top: 10000
-        }
-        QtControls2.ToolTip.delay: 1000
-        QtControls2.ToolTip.visible: hovered
-        QtControls2.ToolTip.text: i18n("Durata dell'effetto di transizione tra le immagini (in millisecondi)\n\nRange: 100-10000 ms (0.1-10 secondi)\nConsigliato: 500-2000 ms per transizioni fluide\nValori molto alti (> 5s) possono sembrare lenti")
-    }
-
-    QtControls2.ComboBox {
-        id: transitionTypeComboBox
-        Kirigami.FormData.label: i18n("Tipo di Transizione:")
-        visible: sectionTransitionsExpanded && transitionEnabledCheckBox.checked
-        enabled: !transitionRandomCheckBox.checked
-        model: [
-            i18n("Fade"),
-            i18n("Slide"),
-            i18n("Zoom")
-        ]
-        currentIndex: wallpaper.configuration.TransitionType || 0
-        QtControls2.ToolTip.delay: 1000
-        QtControls2.ToolTip.visible: hovered
-        QtControls2.ToolTip.text: i18n("Tipo di transizione da usare:\n\n• Fade: dissolvenza incrociata (crossfade) - più fluida\n• Slide: movimento orizzontale (la nuova immagine entra da destra)\n• Zoom: effetto zoom (la nuova immagine parte piccola e ingrandisce)\n\nDisabilitato se 'Randomizza tipo di transizione' è attivo")
-    }
-
-    Kirigami.Separator {
-        Kirigami.FormData.isSection: false
-    }
-
-    // ============================================
-    // SEZIONE 4: VISUALIZZAZIONE IMMAGINE
+    // SEZIONE 3: VISUALIZZAZIONE IMMAGINE
     // ============================================
 
     QtControls2.CheckBox {
@@ -351,7 +278,7 @@ Kirigami.FormLayout {
     }
 
     // ============================================
-    // SEZIONE 5: OVERLAY E INFORMAZIONI
+    // SEZIONE 4: OVERLAY E INFORMAZIONI
     // ============================================
     
     QtControls2.CheckBox {
