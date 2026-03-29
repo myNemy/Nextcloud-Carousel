@@ -1,5 +1,8 @@
 #!/bin/bash
 # Installation script for Nextcloud Plasma Wallpaper Plugins
+#
+# Install and obsolete-cleanup logic only affect this project’s wallpaper plugins (carousel + video),
+# the carousel QML/C++ module paths, and the nextcloud-carousel cache dir — not the Nextcloud Desktop client or unrelated QML.
 
 # NON usare set -e qui - vogliamo continuare anche se la compilazione fallisce
 # set -e  # RIMOSSO
@@ -7,13 +10,62 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_IMAGE_NAME="org.nextcloud.carousel"
 PLUGIN_VIDEO_NAME="org.nextcloud.video"
-PLUGIN_IMAGE_DIR="$HOME/.local/share/plasma/wallpapers/${PLUGIN_IMAGE_NAME}"
-PLUGIN_VIDEO_DIR="$HOME/.local/share/plasma/wallpapers/${PLUGIN_VIDEO_NAME}"
 SOURCE_IMAGE_DIR="${SCRIPT_DIR}/nextcloud-carousel"
 SOURCE_VIDEO_DIR="${SCRIPT_DIR}/nextcloud-video"
 
+# Home for per-user Plasma data (~/.local/share/plasma/wallpapers, ~/.local/lib/qt6/qml).
+# With "sudo ./install.sh", $HOME is often /root — use the invoking user's home (SUDO_USER)
+# so plugins and user-local C++ match the account that runs plasmashell.
+PLASMA_USER_HOME="${HOME}"
+if [ "$(id -u)" -eq 0 ]; then
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+        _suh="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+        if [ -n "$_suh" ] && [ -d "$_suh" ]; then
+            PLASMA_USER_HOME="$_suh"
+        else
+            echo "⚠️  Could not resolve a valid home for SUDO_USER=$SUDO_USER; using $HOME"
+        fi
+    else
+        echo "═══════════════════════════════════════════════════════════"
+        echo "⚠️  Running as root without SUDO_USER (e.g. straight root login)."
+        echo "    Per-user install paths use: $HOME/.local/..."
+        echo "    Other desktop users will NOT see that copy."
+        echo "    Prefer: sudo -u <username> $0   or a normal user with sudo for /usr install."
+        echo "═══════════════════════════════════════════════════════════"
+        echo ""
+    fi
+fi
+unset _suh
+NC_USER_LOCAL="${PLASMA_USER_HOME}/.local"
+PLUGIN_IMAGE_DIR="${NC_USER_LOCAL}/share/plasma/wallpapers/${PLUGIN_IMAGE_NAME}"
+PLUGIN_VIDEO_DIR="${NC_USER_LOCAL}/share/plasma/wallpapers/${PLUGIN_VIDEO_NAME}"
+SYSTEM_PLASMA_WALLPAPER_ROOT="/usr/share/plasma/wallpapers"
+SYSTEM_IMAGE_DIR="${SYSTEM_PLASMA_WALLPAPER_ROOT}/${PLUGIN_IMAGE_NAME}"
+SYSTEM_VIDEO_DIR="${SYSTEM_PLASMA_WALLPAPER_ROOT}/${PLUGIN_VIDEO_NAME}"
+
+# Set true when CMake installs wallpaper + C++ under /usr (all users on this machine).
+NC_SYSTEM_PLASMA_WALLPAPER=false
+
+# Run a command as the desktop user when this script was started via sudo (avoid root-owned files in ~/.local).
+run_as_target_plasma_user() {
+    if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+        sudo -u "$SUDO_USER" -- "$@"
+    else
+        "$@"
+    fi
+}
+
 echo "Installing Nextcloud Plasma Wallpaper Plugins..."
+if [ "$PLASMA_USER_HOME" != "$HOME" ]; then
+    echo "Per-user Plasma paths use: $PLASMA_USER_HOME (invoking user, not root's HOME)."
+fi
 echo ""
+
+if [ -f "${SCRIPT_DIR}/scripts/plasma-nextcloud-common.sh" ]; then
+    # shellcheck source=scripts/plasma-nextcloud-common.sh
+    . "${SCRIPT_DIR}/scripts/plasma-nextcloud-common.sh"
+    nc_prompt_obsolete_cleanup install
+fi
 
 # Funzione per rilevare il tipo di distribuzione
 detect_distro() {
@@ -120,6 +172,43 @@ check_build_dependencies() {
     fi
 }
 
+# Compile .po → .mo under a wallpaper plugin root (user dir or /usr/share/...).
+# Args: source_plugin_dir dest_plugin_root use_sudo (0 or 1)
+compile_wallpaper_translations() {
+    local src_root="$1"
+    local dest_root="$2"
+    local use_sudo="$3"
+    if ! command -v msgfmt >/dev/null 2>&1; then
+        echo "  ⚠️  msgfmt not found; install gettext to compile translations"
+        return 0
+    fi
+    local po_file
+    for po_file in "$src_root"/contents/locale/*/LC_MESSAGES/*.po; do
+        if [ -f "$po_file" ]; then
+            local lang_dir mo_file lang po_name
+            lang_dir=$(dirname "$po_file")
+            lang=$(basename "$(dirname "$lang_dir")")
+            po_name=$(basename "$po_file" .po)
+            mo_file="$dest_root/contents/locale/$lang/LC_MESSAGES/${po_name}.mo"
+            if [ "$use_sudo" = "1" ]; then
+                sudo mkdir -p "$(dirname "$mo_file")"
+                if sudo msgfmt -o "$mo_file" "$po_file" 2>/dev/null; then
+                    echo "  ✅ Compiled $lang → $mo_file"
+                else
+                    echo "  ⚠️  Failed to compile $lang (sudo msgfmt)"
+                fi
+            else
+                run_as_target_plasma_user mkdir -p "$(dirname "$mo_file")"
+                if run_as_target_plasma_user msgfmt -o "$mo_file" "$po_file" 2>/dev/null; then
+                    echo "  ✅ Compiled $lang translation"
+                else
+                    echo "  ⚠️  Failed to compile $lang translation"
+                fi
+            fi
+        fi
+    done
+}
+
 # Funzione per tentare la compilazione del componente C++
 try_build_cpp_component() {
     echo "═══════════════════════════════════════════════════════════"
@@ -129,7 +218,7 @@ try_build_cpp_component() {
     
     # Determina se abbiamo autorizzazioni sudo per installazione di sistema
     local HAS_SUDO=false
-    local INSTALL_PREFIX="$HOME/.local"
+    local INSTALL_PREFIX="${NC_USER_LOCAL}"
     local INSTALL_TYPE="user"
     
     if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
@@ -288,7 +377,7 @@ try_build_cpp_component() {
             echo ""
             echo "   ❌ System installation failed (see errors above)"
             echo "   ℹ️  Trying user installation instead..."
-            INSTALL_PREFIX="$HOME/.local"
+            INSTALL_PREFIX="${NC_USER_LOCAL}"
             INSTALL_TYPE="user"
             HAS_SUDO=false
             # Ricompila con nuovo prefix
@@ -298,7 +387,7 @@ try_build_cpp_component() {
                 rm -rf "$BUILD_DIR"
                 return 1
             fi
-            if ! cmake --install "$BUILD_DIR" 2>&1 | sed 's/^/      /'; then
+            if ! run_as_target_plasma_user cmake --install "$BUILD_DIR" 2>&1 | sed 's/^/      /'; then
                 echo "   ❌ User installation failed"
                 cd "$SCRIPT_DIR"
                 rm -rf "$BUILD_DIR"
@@ -307,7 +396,7 @@ try_build_cpp_component() {
         fi
     else
         # Installazione utente - senza sudo
-        if ! cmake --install "$BUILD_DIR" 2>&1 | sed 's/^/      /'; then
+        if ! run_as_target_plasma_user cmake --install "$BUILD_DIR" 2>&1 | sed 's/^/      /'; then
             echo ""
             echo "   ❌ Installation failed (see errors above)"
             echo "   ℹ️  Will install QML-only version instead"
@@ -322,16 +411,17 @@ try_build_cpp_component() {
     rm -rf "$BUILD_DIR"
     
     if [ "$INSTALL_TYPE" = "system" ]; then
+        NC_SYSTEM_PLASMA_WALLPAPER=true
         echo "   ✅ C++ ImageProvider compiled and installed successfully in /usr/lib/qt6/qml/"
         echo "   💡 Plugin will use file temporanei (reduces memory usage by ~30%)"
         echo "   ✅ Installazione di sistema - disponibile per tutti gli utenti"
         echo "   ✅ Plasmashell troverà automaticamente il plugin C++"
     else
-        echo "   ✅ C++ ImageProvider compiled and installed successfully in ~/.local/lib/qt6/qml/"
-        echo "   ⚠️  ATTENZIONE: Plasmashell potrebbe non trovare il plugin in ~/.local/lib/qt6/qml/"
+        echo "   ✅ C++ ImageProvider compiled and installed successfully in ${NC_USER_LOCAL}/lib/qt6/qml/"
+        echo "   ⚠️  ATTENZIONE: Plasmashell potrebbe non trovare il plugin in ${NC_USER_LOCAL}/lib/qt6/qml/"
         echo "   ⚠️  Se il plugin C++ non viene trovato, verrà usato QML fallback"
         echo "   💡 Per usare il plugin C++, installa in /usr/ con: sudo ./install.sh"
-        echo "   💡 Oppure aggiungi ~/.local/lib/qt6/qml/ a QML_IMPORT_PATH"
+        echo "   💡 Oppure aggiungi ${NC_USER_LOCAL}/lib/qt6/qml/ a QML_IMPORT_PATH"
     fi
     echo ""
     return 0
@@ -347,25 +437,19 @@ fi
 if [ -d "$SOURCE_IMAGE_DIR" ]; then
     echo "Installing Nextcloud Carousel (Images) Plugin..."
     echo "Source: $SOURCE_IMAGE_DIR"
-    echo "Destination: $PLUGIN_IMAGE_DIR"
-    
-    mkdir -p "$PLUGIN_IMAGE_DIR"
-    cp -r "$SOURCE_IMAGE_DIR"/* "$PLUGIN_IMAGE_DIR/"
-    echo "✅ Image plugin installed successfully!"
-    
-    # Compile translations for image plugin
-    if command -v msgfmt >/dev/null 2>&1; then
+    if [ "${NC_SYSTEM_PLASMA_WALLPAPER}" = true ]; then
+        echo "System-wide QML + C++ already installed under ${SYSTEM_IMAGE_DIR} (cmake --install)."
+        echo "Skipping copy to $PLUGIN_IMAGE_DIR so all users share one tree under /usr/share."
+        echo "Compiling translations for carousel plugin (system path)..."
+        compile_wallpaper_translations "$SOURCE_IMAGE_DIR" "$SYSTEM_IMAGE_DIR" 1
+        echo "✅ Image plugin (system) ready for all users."
+    else
+        echo "Destination (per-user): $PLUGIN_IMAGE_DIR"
+        run_as_target_plasma_user mkdir -p "$PLUGIN_IMAGE_DIR"
+        run_as_target_plasma_user cp -r "$SOURCE_IMAGE_DIR"/* "$PLUGIN_IMAGE_DIR/"
+        echo "✅ Image plugin installed successfully!"
         echo "Compiling translations for carousel plugin..."
-        for po_file in "$SOURCE_IMAGE_DIR"/contents/locale/*/LC_MESSAGES/*.po; do
-            if [ -f "$po_file" ]; then
-                lang_dir=$(dirname "$po_file")
-                lang=$(basename "$(dirname "$lang_dir")")
-                po_name=$(basename "$po_file" .po)
-                mo_file="$PLUGIN_IMAGE_DIR/contents/locale/$lang/LC_MESSAGES/${po_name}.mo"
-                mkdir -p "$(dirname "$mo_file")"
-                msgfmt -o "$mo_file" "$po_file" 2>/dev/null && echo "  ✅ Compiled $lang translation" || echo "  ⚠️  Failed to compile $lang translation"
-            fi
-        done
+        compile_wallpaper_translations "$SOURCE_IMAGE_DIR" "$PLUGIN_IMAGE_DIR" 0
     fi
 else
     echo "⚠️  Image plugin source not found: $SOURCE_IMAGE_DIR"
@@ -377,25 +461,19 @@ echo ""
 if [ -d "$SOURCE_VIDEO_DIR" ]; then
     echo "Installing Nextcloud Video Plugin..."
     echo "Source: $SOURCE_VIDEO_DIR"
-    echo "Destination: $PLUGIN_VIDEO_DIR"
-    
-    mkdir -p "$PLUGIN_VIDEO_DIR"
-    cp -r "$SOURCE_VIDEO_DIR"/* "$PLUGIN_VIDEO_DIR/"
-    echo "✅ Video plugin installed successfully!"
-    
-    # Compile translations for video plugin
-    if command -v msgfmt >/dev/null 2>&1; then
+    if [ "${NC_SYSTEM_PLASMA_WALLPAPER}" = true ]; then
+        echo "System-wide plugin already under ${SYSTEM_VIDEO_DIR} (cmake --install)."
+        echo "Skipping copy to $PLUGIN_VIDEO_DIR."
+        echo "Compiling translations for video plugin (system path)..."
+        compile_wallpaper_translations "$SOURCE_VIDEO_DIR" "$SYSTEM_VIDEO_DIR" 1
+        echo "✅ Video plugin (system) ready for all users."
+    else
+        echo "Destination (per-user): $PLUGIN_VIDEO_DIR"
+        run_as_target_plasma_user mkdir -p "$PLUGIN_VIDEO_DIR"
+        run_as_target_plasma_user cp -r "$SOURCE_VIDEO_DIR"/* "$PLUGIN_VIDEO_DIR/"
+        echo "✅ Video plugin installed successfully!"
         echo "Compiling translations for video plugin..."
-        for po_file in "$SOURCE_VIDEO_DIR"/contents/locale/*/LC_MESSAGES/*.po; do
-            if [ -f "$po_file" ]; then
-                lang_dir=$(dirname "$po_file")
-                lang=$(basename "$(dirname "$lang_dir")")
-                po_name=$(basename "$po_file" .po)
-                mo_file="$PLUGIN_VIDEO_DIR/contents/locale/$lang/LC_MESSAGES/${po_name}.mo"
-                mkdir -p "$(dirname "$mo_file")"
-                msgfmt -o "$mo_file" "$po_file" 2>/dev/null && echo "  ✅ Compiled $lang translation" || echo "  ⚠️  Failed to compile $lang translation"
-            fi
-        done
+        compile_wallpaper_translations "$SOURCE_VIDEO_DIR" "$PLUGIN_VIDEO_DIR" 0
     fi
 else
     echo "⚠️  Video plugin source not found: $SOURCE_VIDEO_DIR"
@@ -436,19 +514,22 @@ if [ "$CPP_COMPONENT_AVAILABLE" = true ]; then
         echo "   Plasmashell will automatically find the C++ plugin"
         echo "   The plugin will use file temporanei instead of Data URLs,"
         echo "   reducing memory usage by approximately 30%."
+        if [ "${NC_SYSTEM_PLASMA_WALLPAPER}" = true ]; then
+            echo "   All session users get the same QML + C++; each user's cache is still"
+            echo "   under their own ~/.cache/plasmashell/nextcloud-carousel/ when C++ runs."
+        fi
     else
-        echo "💡 The C++ plugin is installed in ~/.local/lib/qt6/qml/ (user installation)"
+        echo "💡 The C++ plugin is installed under ${NC_USER_LOCAL}/lib/qt6/qml/ (user installation)"
         echo "   ⚠️  If plasmashell doesn't find the plugin, QML fallback will be used"
-        echo "   To use the C++ plugin, install to /usr/ with: sudo ./install.sh"
+        echo "   To use the C++ plugin for every user, install to /usr/ with: sudo ./install.sh"
     fi
     echo ""
     echo "⚠️  NOTE: If the indicator shows 'QML' instead of 'C++', plasmashell"
-    echo "   might not be finding the QML module. The plugin is installed in:"
-    echo "   ~/.local/share/qml/org/nextcloud/carousel/"
+    echo "   might not be finding the QML module. User install puts imports under:"
+    echo "   ${NC_USER_LOCAL}/lib/qt6/qml/org/nextcloud/carousel/"
     echo ""
-    echo "   To fix this, add to your ~/.bashrc or ~/.profile:"
-    echo "   export QML2_IMPORT_PATH=\$HOME/.local/share/qml:\$QML2_IMPORT_PATH"
-    echo "   Then restart plasmashell."
+    echo "   To fix this, add to ~/.bashrc or ~/.profile (then restart plasmashell):"
+    echo "   export QML2_IMPORT_PATH=${NC_USER_LOCAL}/lib/qt6/qml:\${QML2_IMPORT_PATH}"
 else
     echo "✅ INSTALLATION TYPE: QML-ONLY (basic version)"
     echo ""
@@ -496,6 +577,13 @@ fi
 # C++ component is installed in ~/.local/lib/qt6/qml/ which Qt6 searches automatically
 # No manual configuration needed - Qt6 will find it automatically
 echo ""
-echo "To uninstall:"
-echo "  Images: rm -rf $PLUGIN_IMAGE_DIR"
-echo "  Video:  rm -rf $PLUGIN_VIDEO_DIR"
+echo "To uninstall (recommended: ./uninstall.sh — handles user + system paths and cache):"
+if [ "${NC_SYSTEM_PLASMA_WALLPAPER}" = true ]; then
+    echo "  System (this install run used cmake → /usr):"
+    echo "    sudo rm -rf ${SYSTEM_IMAGE_DIR} ${SYSTEM_VIDEO_DIR}"
+    echo "    sudo rm -rf /usr/lib/qt6/qml/org/nextcloud/carousel"
+else
+    echo "  Images: rm -rf $PLUGIN_IMAGE_DIR"
+    echo "  Video:  rm -rf $PLUGIN_VIDEO_DIR"
+    echo "  Optional C++ (user): rm -rf ${NC_USER_LOCAL}/lib/qt6/qml/org/nextcloud/carousel"
+fi

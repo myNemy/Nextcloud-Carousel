@@ -237,12 +237,27 @@ killall plasmashell && kstart plasmashell
 
 ### Manual Uninstall
 
+Prefer `./uninstall.sh`: it removes **carousel + video**, user and (optionally) **system** paths under `/usr`, and the image cache under `~/.cache/plasmashell/nextcloud-carousel`.
+
+User-only install (roughly):
+
 ```bash
 rm -rf ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
+rm -rf ~/.local/share/plasma/wallpapers/org.nextcloud.video
+rm -rf ~/.local/lib/qt6/qml/org/nextcloud/carousel
+rm -rf ~/.cache/plasmashell/nextcloud-carousel
 killall plasmashell && kstart plasmashell
 ```
 
-**Note:** Configuration data in `~/.config/plasmarc` may remain. Remove manually if needed.
+System-wide install (from `sudo ./install.sh` with CMake → `/usr`):
+
+```bash
+sudo rm -rf /usr/share/plasma/wallpapers/org.nextcloud.carousel
+sudo rm -rf /usr/share/plasma/wallpapers/org.nextcloud.video
+sudo rm -rf /usr/lib/qt6/qml/org/nextcloud/carousel
+```
+
+**Note:** Entries in `~/.config/plasmarc` may remain; edit or remove stale wallpaper lines if needed.
 
 ## Scripts
 
