@@ -40,6 +40,7 @@ QML_PLUGIN_SYSTEM="/usr/lib/qt6/qml/org/nextcloud/carousel"
 # Cache paths (C++ downloader uses plasmashell cache; legacy path kept if present)
 CACHE_PLASMA="${PLASMA_USER_HOME}/.cache/plasmashell/nextcloud-carousel"
 CACHE_LEGACY="${PLASMA_USER_HOME}/.cache/nextcloud-carousel"
+NC_PLASMA_ENV_QML="${PLASMA_USER_HOME}/.config/plasma-workspace/env/nextcloud-carousel-qml.sh"
 
 run_as_target_plasma_user() {
     if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
@@ -120,6 +121,10 @@ run_as_target_plasma_user rm -rf "$PLUGIN_IMAGE_DIR" 2>/dev/null || true
 run_as_target_plasma_user rm -rf "$PLUGIN_VIDEO_DIR" 2>/dev/null || true
 run_as_target_plasma_user rm -rf "$QML_PLUGIN_USER" 2>/dev/null || true
 echo "✅ User-local plugin paths processed."
+
+echo "Removing Plasma session QML snippet (user-local C++ path) if present..."
+run_as_target_plasma_user rm -f "$NC_PLASMA_ENV_QML" 2>/dev/null || true
+echo "✅ Plasma env processed."
 
 echo "Removing image cache (optional, frees disk)..."
 run_as_target_plasma_user rm -rf "$CACHE_PLASMA" 2>/dev/null || true

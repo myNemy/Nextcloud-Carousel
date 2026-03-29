@@ -70,6 +70,10 @@ killall plasmashell && kstart plasmashell
 - **Log out and log back in**, or
 - **Restart your system**
 
+### C++ optimization without root (`~/.local`)
+
+If the installer builds the optional C++ downloader, it lives under `~/.local/lib/qt6/qml/`. **Plasmashell does not use that path by default**, so the installer adds `~/.config/plasma-workspace/env/nextcloud-carousel-qml.sh` to set `QML_IMPORT_PATH` for your Plasma session. **Log out and log back in** (or reboot) once so that file takes effect; after that the carousel can use the C++ file pipeline instead of the QML-only fallback. A system install under `/usr` does not need this snippet.
+
 ## Configuration
 
 ### Basic Setup
@@ -246,6 +250,7 @@ rm -rf ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
 rm -rf ~/.local/share/plasma/wallpapers/org.nextcloud.video
 rm -rf ~/.local/lib/qt6/qml/org/nextcloud/carousel
 rm -rf ~/.cache/plasmashell/nextcloud-carousel
+rm -f ~/.config/plasma-workspace/env/nextcloud-carousel-qml.sh
 killall plasmashell && kstart plasmashell
 ```
 
