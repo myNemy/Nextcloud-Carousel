@@ -7,7 +7,8 @@
 */
 
 import QtQuick 2.0
-import org.nextcloud.carousel 1.0
+// Import via relative path under contents/ui/ (see NextcloudDownloaderSingleton.qml for rationale).
+import "org/nextcloud/carousel"
 
 QtObject {
     property var provider: ImageProvider

@@ -7,9 +7,11 @@
 */
 
 import QtQuick 2.0
-// Direct import here is safe because this file is loaded by Loader,
-// which handles errors gracefully without crashing plasmashell.
-import org.nextcloud.carousel 1.0
+// Import the module via a relative path under contents/ui/.
+// This avoids relying on distro-specific Qt import paths (e.g. /usr/lib/... vs /usr/lib/x86_64-linux-gnu/...),
+// and works for both user installs and system installs of the wallpaper package.
+// If the C++ module is not present, Loader will fail gracefully and we fall back in main.qml.
+import "org/nextcloud/carousel"
 
 QtObject {
     id: root
