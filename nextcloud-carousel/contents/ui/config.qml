@@ -35,6 +35,7 @@ Kirigami.FormLayout {
     property alias cfg_MaxImageSizeMB: maxImageSizeMBField.text
     property alias cfg_ShowMethodIndicator: showMethodIndicatorCheckBox.checked
     property alias cfg_MethodIndicatorDuration: methodIndicatorDurationField.text
+    property alias cfg_QmlDataUrlFallback: qmlDataUrlFallbackCheckBox.checked
     property alias formLayout: root
 
     // Proprietà per sezioni collassabili
@@ -448,5 +449,15 @@ Kirigami.FormLayout {
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Quanto tempo mostrare l'indicatore del metodo dopo il caricamento di un'immagine\n\nRange: 0-30 secondi\n• 0 = sempre visibile (non scompare mai)\n• 1-30 = scompare automaticamente dopo N secondi\n\nConsigliato: 3-5 secondi per vedere rapidamente il metodo usato")
+    }
+
+    QtControls2.CheckBox {
+        id: qmlDataUrlFallbackCheckBox
+        Kirigami.FormData.label: i18n("Fallback QML:")
+        text: i18n("Allow Data URL download when C++ downloader is missing or fails")
+        visible: sectionOverlayExpanded
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("When checked, the wallpaper can load images via QML (in-memory Data URLs) if the optional C++ module is not installed or a download error occurs.\n\nUncheck to use only the C++ file-based pipeline: slides are skipped until the C++ module works. Reduces memory use and avoids the slower path, but requires the C++ plugin (see README / install.sh).")
     }
 }

@@ -247,3 +247,15 @@ msgstr "Orientamento: 180°"
 msgid "Orientation: Normal"
 msgstr "Orientamento: Normale"
 
+#: contents/ui/config.qml
+msgid "Fallback QML:"
+msgstr "Fallback QML:"
+
+#: contents/ui/config.qml
+msgid "Allow Data URL download when C++ downloader is missing or fails"
+msgstr "Consenti download Data URL se il downloader C++ manca o fallisce"
+
+#: contents/ui/config.qml
+msgid "When checked, the wallpaper can load images via QML (in-memory Data URLs) if the optional C++ module is not installed or a download error occurs.\n\nUncheck to use only the C++ file-based pipeline: slides are skipped until the C++ module works. Reduces memory use and avoids the slower path, but requires the C++ plugin (see README / install.sh)."
+msgstr "Se attivo, lo sfondo può caricare le immagini via QML (Data URL in memoria) se il modulo C++ opzionale non è installato o si verifica un errore di download.\n\nDisattiva per usare solo la pipeline C++ su file: le slide vengono saltate finché il modulo C++ non funziona. Riduce l’uso di memoria e evita il percorso più lento, ma richiede il plugin C++ (vedi README / install.sh)."
+

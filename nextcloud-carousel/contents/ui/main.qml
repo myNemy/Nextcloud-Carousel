@@ -2046,7 +2046,24 @@ WallpaperItem {
                     if (root.pendingDownloads && root.pendingDownloads[cleanUrl]) {
                         delete root.pendingDownloads[cleanUrl]  // Clear pending status
                     }
+                    if (root.configuration.QmlDataUrlFallback === false) {
+                        console.warn("QML Data URL fallback disabled — not retrying with Data URL after C++ error")
+                        root.loading = false
+                        if (carouselController.photoList.length > 1) {
+                            carouselTimer.restart()
+                        }
+                        return
+                    }
                 }
+            }
+            
+            if (root.configuration.QmlDataUrlFallback === false) {
+                console.warn("QML Data URL fallback disabled: need C++ NextcloudDownloader for", cleanUrl.replace(/https?:\/\/[^@]+@?/, ""))
+                root.loading = false
+                if (carouselController.photoList.length > 1) {
+                    carouselTimer.restart()
+                }
+                return
             }
             
             // Fallback to Data URL (used when NextcloudDownloader not available or download in progress)

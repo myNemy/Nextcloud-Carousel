@@ -119,6 +119,11 @@
       <max>30</max>
       <whatsthis>How long to show the method indicator after an image loads. Set to 0 to keep it always visible.</whatsthis>
     </entry>
+    <entry name="QmlDataUrlFallback" type="bool">
+      <label>Allow QML Data URL fallback (when C++ module unavailable)</label>
+      <default>true</default>
+      <whatsthis>When enabled, images load via in-process Data URLs if the optional C++ downloader is missing or fails. When disabled, only the C++ file-based pipeline is used; otherwise slides are skipped. Disable to avoid the heavier QML path and force use of the C++ module (install it and set QML_IMPORT_PATH if needed).</whatsthis>
+    </entry>
   </group>
 </kcfg>
 
