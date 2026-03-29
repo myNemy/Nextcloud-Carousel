@@ -456,10 +456,9 @@ try_build_cpp_component() {
         echo "   ✅ Plasmashell troverà automaticamente il plugin C++"
     else
         echo "   ✅ C++ ImageProvider compiled and installed successfully in ${NC_USER_LOCAL}/lib/qt6/qml/"
-        echo "   ⚠️  ATTENZIONE: Plasmashell potrebbe non trovare il plugin in ${NC_USER_LOCAL}/lib/qt6/qml/"
-        echo "   ⚠️  Se il plugin C++ non viene trovato, verrà usato QML fallback"
-        echo "   💡 Per usare il plugin C++, installa in /usr/ con: sudo ./install.sh"
-        echo "   💡 Oppure aggiungi ${NC_USER_LOCAL}/lib/qt6/qml/ a QML_IMPORT_PATH"
+        echo "   💡 install.sh copia anche il modulo sotto .../contents/ui/org/nextcloud/carousel/"
+        echo "      così plasmashell risolve import org.nextcloud.carousel senza QML_IMPORT_PATH."
+        echo "   💡 Opzionale: snippet Plasma in ~/.config/plasma-workspace/env/ per altri tool Qt."
     fi
     echo ""
     return 0
@@ -488,6 +487,12 @@ if [ -d "$SOURCE_IMAGE_DIR" ]; then
         echo "✅ Image plugin installed successfully!"
         echo "Compiling translations for carousel plugin..."
         compile_wallpaper_translations "$SOURCE_IMAGE_DIR" "$PLUGIN_IMAGE_DIR" 0
+        # Plasmashell adds contents/ui/ to QML import paths — nest module so import works without session env
+        if [ -f "${NC_USER_LOCAL}/lib/qt6/qml/org/nextcloud/carousel/${NC_QML_SO_NAME}" ]; then
+            echo "Embedding C++ QML module into wallpaper tree (contents/ui/org/nextcloud/carousel/)..."
+            run_as_target_plasma_user mkdir -p "${PLUGIN_IMAGE_DIR}/contents/ui/org/nextcloud/carousel"
+            run_as_target_plasma_user cp -a "${NC_USER_LOCAL}/lib/qt6/qml/org/nextcloud/carousel/"* "${PLUGIN_IMAGE_DIR}/contents/ui/org/nextcloud/carousel/"
+        fi
     fi
 else
     echo "⚠️  Image plugin source not found: $SOURCE_IMAGE_DIR"
@@ -559,10 +564,9 @@ if [ "$CPP_COMPONENT_AVAILABLE" = true ]; then
             echo "   under their own ~/.cache/plasmashell/nextcloud-carousel/ when C++ runs."
         fi
     else
-        echo "💡 The C++ plugin is installed under ${NC_USER_LOCAL}/lib/qt6/qml/ (user installation)"
-        echo "   A Plasma session snippet was installed so plasmashell can load it without sudo:"
-        echo "   $NC_PLASMA_ENV_QML"
-        echo "   After logging out and back in, the indicator should show C++ instead of QML."
+        echo "💡 User install: C++ module is under ${NC_USER_LOCAL}/lib/qt6/qml/ and copied into the"
+        echo "   wallpaper package at contents/ui/org/nextcloud/carousel/ (used by plasmashell)."
+        echo "   Optional session snippet: $NC_PLASMA_ENV_QML (logout/login if you rely on it)."
         echo "   For system-wide install (all users): sudo ./install.sh"
     fi
     echo ""

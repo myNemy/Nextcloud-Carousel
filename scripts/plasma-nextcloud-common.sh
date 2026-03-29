@@ -3,8 +3,10 @@
 #
 # Scope (only this Plasma wallpaper project; does not touch other Nextcloud apps):
 #   • Wallpaper dirs: org.nextcloud.carousel / org.nextcloud.video under …/plasma/wallpapers/
-#   • C++ QML import: …/lib/qt6/qml/org/nextcloud/carousel (and obsolete …/share/qml/…/carousel)
-#   • Image cache: …/nextcloud-carousel (subfolder name used by this plugin’s downloader)
+#   • C++ QML: …/lib/qt6/qml/org/nextcloud/carousel + copy under …/wallpapers/…/contents/ui/org/nextcloud/carousel
+#     (plasmashell resolves import from contents/ui/; optional legacy …/contents/code/*.so)
+#   • Obsolete: …/share/qml/org/nextcloud/carousel (wrong path from old docs)
+#   • Image cache: …/nextcloud-carousel (this plugin’s downloader)
 # Never removes: Nextcloud Desktop, ~/.cache/Nextcloud, other QML modules under org/nextcloud/*
 #   except the carousel import path above.
 #
@@ -46,6 +48,13 @@ nc_prompt_obsolete_cleanup() {
     if [ -d "$NC_WRONG_QML_SHARE" ]; then
         entries_desc+=("Obsolete QML for this plugin only: share/qml/org/nextcloud/carousel (Qt6 uses lib/qt6/qml/)")
         entries_path+=("$NC_WRONG_QML_SHARE")
+        entries_mode+=(user)
+    fi
+
+    # 2b) Legacy flat C++ binary in contents/code (older CMake; correct layout is contents/ui/org/nextcloud/carousel/)
+    if [ -f "${PLUGIN_IMAGE_DIR}/contents/code/libnextcloudimageprovider.so" ]; then
+        entries_desc+=("Legacy C++ module binary in contents/code (use contents/ui/org/nextcloud/carousel/)")
+        entries_path+=("${PLUGIN_IMAGE_DIR}/contents/code/libnextcloudimageprovider.so")
         entries_mode+=(user)
     fi
 

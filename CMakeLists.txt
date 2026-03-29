@@ -39,11 +39,8 @@ if(BUILD_IMAGEPROVIDER)
             LIBRARY_OUTPUT_NAME "nextcloudimageprovider"
         )
         
-        # Install plugin in correct Qt6 QML path
-        # Qt6 automatically searches in:
-        # - /usr/lib/qt6/qml/ (system installation)
-        # - ~/.local/lib/qt6/qml/ (user installation) - NOT ~/.local/share/qml/
-        # This is the standard Qt6 QML plugin path according to official documentation
+        # Install plugin in standard Qt6 QML path (qmltooling, qmake --install, etc.)
+        # Also install a copy under …/plasma/wallpapers/…/contents/ui/org/nextcloud/carousel (see QML_PLUGIN_DIR_WALLPAPER_UI).
         if(CMAKE_INSTALL_PREFIX STREQUAL "/usr" OR CMAKE_INSTALL_PREFIX MATCHES "^/usr/")
             # System installation
             set(QML_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/lib/qt6/qml/org/nextcloud/carousel")
@@ -53,30 +50,31 @@ if(BUILD_IMAGEPROVIDER)
         endif()
         set(PLUGIN_CAROUSEL_NAME "org.nextcloud.carousel")
         set(PLUGIN_CAROUSEL_DIR_TEMP "${CMAKE_INSTALL_PREFIX}/share/plasma/wallpapers/${PLUGIN_CAROUSEL_NAME}")
-        set(QML_PLUGIN_DIR "${PLUGIN_CAROUSEL_DIR_TEMP}/contents/code")
+        # Plasmashell loads main.qml from contents/ui/; the engine adds that directory to QML import paths,
+        # so org/nextcloud/carousel must live under contents/ui/ (no QML_IMPORT_PATH needed for wallpaper).
+        set(QML_PLUGIN_DIR_WALLPAPER_UI "${PLUGIN_CAROUSEL_DIR_TEMP}/contents/ui/org/nextcloud/carousel")
         
-        # Install plugin to user QML import path
+        # Install plugin to standard Qt QML path (qmake/cmake user prefix, system /usr, etc.)
         install(TARGETS nextcloudimageprovider
             DESTINATION ${QML_INSTALL_DIR}
         )
         
-        # Install qmldir to user QML import path
         install(FILES nextcloud-carousel/contents/code/qmldir
             DESTINATION ${QML_INSTALL_DIR}
         )
         
-        # Also install in wallpaper plugin directory (backup location)
+        # Same module inside the wallpaper package — plasmashell resolves import org.nextcloud.carousel here
         install(TARGETS nextcloudimageprovider
-            DESTINATION ${QML_PLUGIN_DIR}
+            DESTINATION ${QML_PLUGIN_DIR_WALLPAPER_UI}
         )
         
         install(FILES nextcloud-carousel/contents/code/qmldir
-            DESTINATION ${QML_PLUGIN_DIR}
+            DESTINATION ${QML_PLUGIN_DIR_WALLPAPER_UI}
         )
         
         message(STATUS "✅ ImageProvider C++ component will be built")
         message(STATUS "   Install directory: ${QML_INSTALL_DIR}")
-        message(STATUS "   Qt6 automatically searches in ~/.local/lib/qt6/qml/ for user installations")
+        message(STATUS "   Wallpaper-resolved module: ${QML_PLUGIN_DIR_WALLPAPER_UI}")
     else()
         message(WARNING "⚠️  Qt6 or KF6 not found - ImageProvider will be skipped")
         set(BUILD_IMAGEPROVIDER OFF)

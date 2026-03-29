@@ -72,7 +72,9 @@ killall plasmashell && kstart plasmashell
 
 ### C++ optimization without root (`~/.local`)
 
-If the installer builds the optional C++ downloader, it lives under `~/.local/lib/qt6/qml/`. **Plasmashell does not use that path by default**, so the installer adds `~/.config/plasma-workspace/env/nextcloud-carousel-qml.sh` to set `QML_IMPORT_PATH` for your Plasma session. **Log out and log back in** (or reboot) once so that file takes effect; after that the carousel can use the C++ file pipeline instead of the QML-only fallback. A system install under `/usr` does not need this snippet.
+If the installer builds the optional C++ downloader, it installs to `~/.local/lib/qt6/qml/org/nextcloud/carousel/` **and copies the same files into the wallpaper tree** at `~/.local/share/plasma/wallpapers/org.nextcloud.carousel/contents/ui/org/nextcloud/carousel/`. Plasmashell loads `main.qml` from `contents/ui/`, and the QML engine adds that folder to the import path, so **`import org.nextcloud.carousel` resolves without** setting `QML_IMPORT_PATH`.
+
+The installer still adds `~/.config/plasma-workspace/env/nextcloud-carousel-qml.sh` so other Qt tools can find the module under `~/.local/lib/qt6/qml/`; a full session restart may be needed for that. A system install under `/usr` uses the same nested path under `/usr/share/plasma/wallpapers/.../contents/ui/org/nextcloud/carousel/`.
 
 ## Configuration
 
