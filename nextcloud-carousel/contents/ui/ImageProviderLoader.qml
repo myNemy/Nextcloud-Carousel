@@ -1,6 +1,6 @@
 /*
     SPDX-FileCopyrightText: 2024 Nextcloud Carousel Developer
-    SPDX-License-Identifier: GPL-2.0-or-later
+    SPDX-License-Identifier: AGPL-3.0-or-later
     
     This component tests if image://nextcloud/ URLs work.
     If they do, the C++ ImageProvider plugin was auto-loaded by Qt.

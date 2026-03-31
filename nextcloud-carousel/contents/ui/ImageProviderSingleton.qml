@@ -1,6 +1,6 @@
 /*
     SPDX-FileCopyrightText: 2024 Nextcloud Carousel Developer
-    SPDX-License-Identifier: GPL-2.0-or-later
+    SPDX-License-Identifier: AGPL-3.0-or-later
     
     This component loads the ImageProvider singleton dynamically.
     It imports the module directly - if module is not available, Loader will fail gracefully.

@@ -12,7 +12,7 @@
         "Description[it]": "Plugin wallpaper carosello per visualizzare foto da Nextcloud",
         "Icon": "folder-image",
         "Id": "org.nextcloud.carousel",
-        "License": "GPL-2.0-or-later",
+        "License": "AGPL-3.0-or-later",
         "MimeTypes": [
             "image/jpeg",
             "image/png",

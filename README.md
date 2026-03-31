@@ -320,7 +320,7 @@ nextcloud-carousel/
 
 ## License
 
-GPL-2.0-or-later
+AGPL-3.0-or-later
 
 ## Credits
 
