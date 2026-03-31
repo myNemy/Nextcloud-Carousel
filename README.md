@@ -248,6 +248,12 @@ killall plasmashell && kstart plasmashell
 ./uninstall.sh
 ```
 
+**Note:** if you installed system-wide under `/usr` (e.g. you ran `sudo ./install.sh` / chose system install), run:
+
+```bash
+sudo ./uninstall.sh
+```
+
 ### Manual Uninstall
 
 Prefer `./uninstall.sh`: it removes **carousel + video**, user and (optionally) **system** paths under `/usr`, and the image cache under `~/.cache/plasmashell/nextcloud-carousel`.
@@ -296,7 +302,8 @@ sudo rm -rf /usr/lib/qt6/qml/org/nextcloud/carousel
 
 ### Limitations
 - Blur effect is simplified (opacity reduction, not true blur)
-- No local image caching (images downloaded each time)
+- QML Data URL path has no persistent cache (may re-download images)
+- C++ downloader uses a bounded on-disk temp cache (LRU) under the user cache location
 - No offline support (requires network connection)
 - Password stored in plain text (use app passwords)
 
