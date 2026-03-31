@@ -457,6 +457,27 @@ WallpaperItem {
             }
         }
 
+        function takeNextNoRepeatUrl() {
+            // IMPORTANT: noRepeatQueueUrls is a var holding an Array.
+            // Mutating it in place (shift/splice) does not reliably trigger QML bindings.
+            // Always assign a new array instance to ensure UI updates (e.g. stats overlay).
+            if (!noRepeatQueueUrls || noRepeatQueueUrls.length === 0) {
+                return ""
+            }
+            var q = noRepeatQueueUrls.slice(0)
+            var nextUrl = q.shift()
+            noRepeatQueueUrls = q
+            return nextUrl || ""
+        }
+
+        function insertNoRepeatUrlAt(pos, url) {
+            if (!url) return
+            var q = (noRepeatQueueUrls && noRepeatQueueUrls.length) ? noRepeatQueueUrls.slice(0) : []
+            var safePos = Math.max(0, Math.min(q.length, pos))
+            q.splice(safePos, 0, url)
+            noRepeatQueueUrls = q
+        }
+
         function setCurrentByUrl(url) {
             if (!url) return false
             var idx = photoList.indexOf(url)
@@ -527,7 +548,7 @@ WallpaperItem {
                     if (nu === lastShownUrl) continue
                     if (!inQueue[nu]) {
                         var pos = Math.floor(Math.random() * (noRepeatQueueUrls.length + 1))
-                        noRepeatQueueUrls.splice(pos, 0, nu)
+                        insertNoRepeatUrlAt(pos, nu)
                         inQueue[nu] = true
                     }
                 }
@@ -539,7 +560,7 @@ WallpaperItem {
                     return
                 }
                 refillNoRepeatQueueIfNeeded()
-                var nextUrl = noRepeatQueueUrls.shift()
+                var nextUrl = takeNextNoRepeatUrl()
                 if (!setCurrentByUrl(nextUrl)) {
                     currentIndex = 0
                     lastShownUrl = photoList[currentIndex]
@@ -564,7 +585,7 @@ WallpaperItem {
                 currentIndex = Math.floor(Math.random() * photoList.length)
             } else if (orderMode === 4) {
                 refillNoRepeatQueueIfNeeded()
-                var firstUrl = noRepeatQueueUrls.shift()
+                var firstUrl = takeNextNoRepeatUrl()
                 if (!setCurrentByUrl(firstUrl)) {
                     currentIndex = 0
                     lastShownUrl = photoList[currentIndex]
@@ -694,12 +715,12 @@ WallpaperItem {
                 // No Repeat Shuffle: consume queue of URLs; refill when empty.
                 refillNoRepeatQueueIfNeeded()
                 if (noRepeatQueueUrls.length > 0) {
-                    var nextUrl = noRepeatQueueUrls.shift()
+                    var nextUrl = takeNextNoRepeatUrl()
                     if (!setCurrentByUrl(nextUrl)) {
                         // List changed; rebuild queue and fallback safely.
                         noRepeatQueueUrls = []
                         refillNoRepeatQueueIfNeeded()
-                        nextUrl = noRepeatQueueUrls.shift()
+                        nextUrl = takeNextNoRepeatUrl()
                         if (!setCurrentByUrl(nextUrl)) {
                             currentIndex = (currentIndex + 1) % photoList.length
                             lastShownUrl = photoList[currentIndex]

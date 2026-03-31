@@ -78,8 +78,12 @@ Item {
         // This reduces memory usage by 50-75% for large images without quality loss on screen
         // When sourceSizeLimit is set (width > 0), limit decoded resolution to that size
         // When not set (0,0), decode at full resolution (fallback for compatibility)
-        sourceSize: (imageComponent.sourceSizeLimit.width > 0 && imageComponent.sourceSizeLimit.height > 0) 
-                    ? imageComponent.sourceSizeLimit 
+        // Note: when we rotate by 90°/270°, swap the limit dimensions so the decoder target
+        // matches the effective on-screen orientation (avoids odd scaling artifacts on tall images).
+        sourceSize: (imageComponent.sourceSizeLimit.width > 0 && imageComponent.sourceSizeLimit.height > 0)
+                    ? (Math.abs(imageComponent.orientation) === 90
+                        ? Qt.size(imageComponent.sourceSizeLimit.height, imageComponent.sourceSizeLimit.width)
+                        : imageComponent.sourceSizeLimit)
                     : Qt.size(0, 0)  // 0,0 = no limit (decode full resolution)
         
         Component.onCompleted: {
