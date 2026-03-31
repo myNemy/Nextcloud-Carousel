@@ -11,16 +11,17 @@ Two wallpaper plugins for KDE Plasma 6 that display media from your Nextcloud se
 ### Nextcloud Carousel (Image Plugin)
 - ✅ **Automatic photo carousel** from Nextcloud
 - ✅ **Automatic EXIF orientation** correction
-- ✅ **4 ordering modes**: Sequential, Random, Shuffle Once, Smart Random
+- ✅ **5 ordering modes**: Sequential, Random, Shuffle Once, Smart Random, No Repeat Shuffle
 - ✅ **Recursive subfolder support** (loads images from all subfolders)
 - ✅ **Multiple image formats**: JPEG, PNG, WebP, GIF, BMP, SVG, TIFF
 - ✅ **Configurable display settings**: Fill mode, scale, blur, background color
 - ✅ **Loading indicator**: Show/hide option
+- ✅ **Optional C++ downloader** (file-based pipeline)
 
 ### Nextcloud Video (Video Plugin)
 - ✅ **Video wallpaper** from Nextcloud
 - ✅ **Automatic video switching** with configurable interval
-- ✅ **4 ordering modes**: Sequential, Random, Shuffle Once, Smart Random
+- ✅ **Ordering modes**: Sequential, Random, Shuffle Once, Smart Random
 - ✅ **Recursive subfolder support** (loads videos from all subfolders)
 - ✅ **Multiple video formats**: MP4, WebM, OGG, MOV, AVI, MKV, M4V
 - ✅ **Video loop control**: Loop each video or play once
@@ -117,6 +118,12 @@ The installer still adds `~/.config/plasma-workspace/env/nextcloud-carousel-qml.
   - **Random**: Random order each time
   - **Shuffle Once**: Shuffled once, then sequential
   - **Smart Random**: Random but avoids recent repeats
+  - **No Repeat Shuffle**: Show all images once before repeating (best for large libraries)
+
+- **Refresh list (minutes)**: Optional periodic rescan to follow folder changes (add/remove/rename)
+- **Max image size (MB)**: `0 = no limit`, otherwise images larger than the limit may be skipped
+- **QML Data URL fallback**: Optional (disable to force file-based C++ pipeline)
+- **Shuffle stats overlay**: Optional small overlay showing list size and progress
 
 #### Display Settings
 - **Fill Mode**: How images fill the screen
@@ -282,7 +289,7 @@ sudo rm -rf /usr/lib/qt6/qml/org/nextcloud/carousel
   - App passwords can be revoked individually
 
 ### Performance
-- Images are downloaded and converted to base64 data URLs
+- Prefer the **file-based pipeline** (C++ downloader) when available. The QML Data URL path is heavier and uses more memory.
 - Large images may take time to load
 - Network speed affects loading time
 - Consider image optimization in Nextcloud
@@ -298,7 +305,7 @@ sudo rm -rf /usr/lib/qt6/qml/org/nextcloud/carousel
 ### Architecture
 - **QML-based**: Uses Qt Quick and Kirigami components
 - **WebDAV API**: Fetches images via Nextcloud WebDAV endpoint
-- **StackView transitions**: Uses KDE official pattern for smooth animations
+- **Single slide surface**: one `ImageComponent` at a time (no StackView transitions)
 - **EXIF parsing**: Manual EXIF orientation reading from JPEG files
 
 ### File Structure
@@ -315,7 +322,7 @@ nextcloud-carousel/
 │   └── ui/
 │       ├── main.qml      # Main wallpaper display
 │       ├── config.qml    # Configuration UI
-│       └── ImageComponent.qml  # Image component for transitions
+│       └── ImageComponent.qml  # Image component (single slide surface)
 ```
 
 ## License
