@@ -57,19 +57,17 @@ The script will:
 ```bash
 mkdir -p ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
 cp -r nextcloud-carousel/* ~/.local/share/plasma/wallpapers/org.nextcloud.carousel/
-killall plasmashell && kstart plasmashell
 ```
 
 ### After Installation
 
-**Restart plasmashell** to load the plugin:
+**Recommended (normal) approach:** **log out and log back in** (or restart your system) to reload Plasma and pick up newly installed wallpapers.
+
+**Alternative (faster, may be less reliable):** restart plasmashell:
+
 ```bash
 killall plasmashell && kstart plasmashell
 ```
-
-**Note:** If the plugin doesn't appear after restart, you may need to **restart your Plasma session**:
-- **Log out and log back in**, or
-- **Restart your system**
 
 ### C++ optimization without root (`~/.local`)
 
