@@ -21,6 +21,7 @@
 #include <QUuid>
 #include <algorithm>
 #include <memory>
+#include <limits>
 
 NextcloudDownloader::NextcloudDownloader(QObject *parent)
     : QObject(parent)
@@ -167,7 +168,8 @@ qint64 NextcloudDownloader::maxSizeBytesForMb(int maxSizeMB) const
     if (maxSizeMB > 0) {
         return static_cast<qint64>(maxSizeMB) * 1024 * 1024;
     }
-    return static_cast<qint64>(30) * 1024 * 1024;
+    // 0 (or less) means "no limit"
+    return std::numeric_limits<qint64>::max();
 }
 
 QString NextcloudDownloader::extensionFromContentType(const QString &contentType)
@@ -205,7 +207,11 @@ void NextcloudDownloader::onDownloadReadyRead(QNetworkReply *reply)
     if (newTotal > maxB) {
         const int mbLimit = pd->maxSizeMB;
         locker.unlock();
-        failPendingDownload(reply, QStringLiteral("Image too large (max %1 MB)").arg(mbLimit));
+        if (mbLimit > 0) {
+            failPendingDownload(reply, QStringLiteral("Image too large (max %1 MB)").arg(mbLimit));
+        } else {
+            failPendingDownload(reply, QStringLiteral("Image too large"));
+        }
         return;
     }
     const qint64 w = pd->file->write(chunk);
@@ -279,7 +285,11 @@ void NextcloudDownloader::onDownloadFinished(QNetworkReply *reply)
             QFile::remove(pd->filePath);
             delete pd;
             reply->deleteLater();
-            emit downloadFailed(originalUrl, QStringLiteral("Image too large (max %1 MB)").arg(pd->maxSizeMB));
+            if (pd->maxSizeMB > 0) {
+                emit downloadFailed(originalUrl, QStringLiteral("Image too large (max %1 MB)").arg(pd->maxSizeMB));
+            } else {
+                emit downloadFailed(originalUrl, QStringLiteral("Image too large"));
+            }
             return;
         }
         if (pd->file->write(remainder) != remainder.size()) {
@@ -305,7 +315,11 @@ void NextcloudDownloader::onDownloadFinished(QNetworkReply *reply)
         QFile::remove(pd->filePath);
         delete pd;
         reply->deleteLater();
-        emit downloadFailed(originalUrl, QStringLiteral("Image too large (max %1 MB)").arg(pd->maxSizeMB));
+        if (pd->maxSizeMB > 0) {
+            emit downloadFailed(originalUrl, QStringLiteral("Image too large (max %1 MB)").arg(pd->maxSizeMB));
+        } else {
+            emit downloadFailed(originalUrl, QStringLiteral("Image too large"));
+        }
         return;
     }
     

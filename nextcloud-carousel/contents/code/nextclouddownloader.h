@@ -42,7 +42,7 @@ public:
      * @param url URL dell'immagine su Nextcloud
      * @param username Username per autenticazione
      * @param password Password per autenticazione
-     * @param maxSizeMB Dimensione massima in MB (0 = nessun limite, default 30MB)
+     * @param maxSizeMB Dimensione massima in MB (0 = nessun limite)
      * @return Percorso del file locale se già in cache, stringa vuota se download in corso
      */
     Q_INVOKABLE QString downloadImage(const QString &url, 

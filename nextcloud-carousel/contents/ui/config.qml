@@ -109,7 +109,7 @@ Kirigami.FormLayout {
         }
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
-        QtControls2.ToolTip.text: i18n("Dimensione massima immagini da caricare (0 = auto, 3-50MB)\n\nImmagini più grandi vengono saltate per prevenire problemi di memoria.\n\nValori consigliati:\n• 0 = Auto (usa 5MB di default)\n• 3-5MB = Sistemi con poca RAM (< 8GB)\n• 5-10MB = Sistemi medi (8-16GB RAM)\n• 10-15MB = Sistemi potenti (> 16GB RAM)\n• 15-20MB = Solo sistemi molto potenti (> 32GB RAM)\n\nLimite massimo: 50MB (per sicurezza)")
+        QtControls2.ToolTip.text: i18n("Dimensione massima immagini da caricare (0 = nessun limite, 3-50MB)\n\nImmagini più grandi vengono saltate per prevenire problemi di memoria (se imposti un limite > 0).\n\nValori consigliati:\n• 0 = Nessun limite (consigliato con backend C++)\n• 3-5MB = Sistemi con poca RAM (< 8GB)\n• 5-10MB = Sistemi medi (8-16GB RAM)\n• 10-15MB = Sistemi potenti (> 16GB RAM)\n• 15-20MB = Solo sistemi molto potenti (> 32GB RAM)\n\nLimite massimo: 50MB (per sicurezza)")
     }
 
     Kirigami.Separator {

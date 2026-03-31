@@ -208,13 +208,13 @@ WallpaperItem {
         function calculateDynamicImageLimit() {
             // Default conservative values (for systems with unknown memory)
             // NOTE: With sourceSize limit now implemented, decoded memory is reduced by 50-75%
-            // However, we keep conservative defaults for Data URL size (base64 string memory)
+            // However, the Data URL itself (base64 string) still consumes memory, so use a limit unless explicitly disabled.
             var defaultLimitMB = 3  // 3MB default (more conservative, safe for all systems)
             var minLimitMB = 3  // Minimum limit (3MB - safe even on low-end systems)
             var maxLimitMB = 30  // Maximum limit (30MB - even high-end systems shouldn't need more)
             
             // Try to get configured memory limit from user settings
-            // If not configured (0), use conservative default
+            // NOTE: MaxImageSizeMB = 0 means "no limit" (do not skip images based on size).
             var configuredLimitMB = root.configuration.MaxImageSizeMB || 0
             
             if (configuredLimitMB > 0) {
@@ -224,22 +224,11 @@ WallpaperItem {
                 console.log("📊 Using configured image size limit:", limitMB, "MB")
                 return
             }
-            
-            // Auto-calculation: when MaxImageSizeMB = 0, use conservative default
-            // Since QML cannot read system memory directly, we use a safe default
-            // NOTE: With sourceSize limit (now implemented), decoded image memory is reduced by 50-75%
-            // This means we can use slightly higher limits, but we keep conservative defaults
-            // Users can configure MaxImageSizeMB manually based on their system:
-            // - 3-5MB for low-end systems (< 8GB RAM)
-            // - 5-10MB for mid-range systems (8-16GB RAM)
-            // - 10-15MB for high-end systems (> 16GB RAM)
-            // With sourceSize, these limits are safer because decoded memory is limited
-            var estimatedLimitMB = defaultLimitMB
-            
-            // Log the calculated limit
-            maxImageSizeForDataUrl = estimatedLimitMB * 1024 * 1024
-            console.log("📊 Image size limit (auto):", estimatedLimitMB, "MB (MaxImageSizeMB = 0)")
-            console.log("💡 Configure MaxImageSizeMB (3-30MB) in settings to customize based on your system memory")
+
+            // No limit (MaxImageSizeMB = 0): do not skip images based on size.
+            // WARNING: For Data URL fallback this can be memory-heavy; prefer the C++ downloader path when possible.
+            maxImageSizeForDataUrl = 0
+            console.log("📊 Image size limit: disabled (MaxImageSizeMB = 0)")
         }
         
         // Calculate optimal cache size based on total number of photos in the list
@@ -255,7 +244,7 @@ WallpaperItem {
             // Calculate dynamic image size limit based on available memory
             calculateDynamicImageLimit()
             
-            var limitMB = (maxImageSizeForDataUrl / 1024 / 1024).toFixed(0)
+            var limitMB = maxImageSizeForDataUrl > 0 ? (maxImageSizeForDataUrl / 1024 / 1024).toFixed(0) : "∞"
             console.log("⚠️  Cache DISABLED to prevent memory leaks (OOM Killer fix)")
             console.log("📊 Cache configuration: caching disabled (0 data URLs) - images will be re-downloaded each time")
             console.log("🛡️  Memory protection: Images > " + limitMB + "MB will be skipped to prevent OOM crashes")
@@ -2003,11 +1992,12 @@ WallpaperItem {
                 try {
                     // Calculate max size limit (same as QML fallback)
                     var configuredLimitMB = root.configuration.MaxImageSizeMB || 0
-                    var maxSizeMB = 30  // Default 30MB if not configured
                     if (configuredLimitMB > 0) {
-                        maxSizeMB = Math.max(3, Math.min(30, configuredLimitMB))  // Clamp to 3-30MB range
+                        // User-configured explicit limit (MB)
+                        var maxSizeMB = configuredLimitMB
                     } else {
-                        maxSizeMB = 3  // Auto: use conservative 3MB default (same as QML)
+                        // 0 = no limit
+                        var maxSizeMB = 0
                     }
                     var localFilePath = nextcloudDownloader.downloadImage(cleanUrl, username, password, maxSizeMB)
                     if (localFilePath && localFilePath.length > 0) {
@@ -2188,8 +2178,8 @@ WallpaperItem {
                         // This prevents downloading and processing very large images that will be skipped anyway
                         var imageSize = xhr.response.byteLength
                         var maxSize = carouselController.maxImageSizeForDataUrl
-                        
-                        if (imageSize > maxSize) {
+
+                        if (maxSize > 0 && imageSize > maxSize) {
                             console.warn("⚠️  Image too large for data URL conversion:", (imageSize / 1024 / 1024).toFixed(2), "MB (limit:", (maxSize / 1024 / 1024).toFixed(2), "MB)")
                             console.warn("⚠️  Skipping image to prevent OOM crash. Consider resizing images in Nextcloud.")
                             
@@ -2651,12 +2641,12 @@ WallpaperItem {
         // Increase limit by 30% when sourceSize is used (screen resolution is known)
         var screenWidth = imageHost.width || 0
         var screenHeight = imageHost.height || 0
-        if (screenWidth > 0 && screenHeight > 0) {
+        if (effectiveLimit > 0 && screenWidth > 0 && screenHeight > 0) {
             // sourceSize will be used, so we can allow slightly larger Data URLs
             effectiveLimit = effectiveLimit * 1.3  // +30% because decoded size is limited
         }
         
-        if (dataUrl && dataUrl.length > effectiveLimit * 1.4) {
+        if (effectiveLimit > 0 && dataUrl && dataUrl.length > effectiveLimit * 1.4) {
             // Data URL is ~1.3x larger than original (base64 encoding)
             // If it exceeds our limit, skip it
             console.error("⚠️  Data URL too large:", (dataUrl.length / 1024 / 1024).toFixed(2), "MB (limit:", (effectiveLimit / 1024 / 1024).toFixed(2), "MB) - skipping to prevent OOM")
