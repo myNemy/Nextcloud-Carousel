@@ -36,6 +36,7 @@ Kirigami.FormLayout {
     property alias cfg_ShowMethodIndicator: showMethodIndicatorCheckBox.checked
     property alias cfg_MethodIndicatorDuration: methodIndicatorDurationField.text
     property alias cfg_QmlDataUrlFallback: qmlDataUrlFallbackCheckBox.checked
+    property alias cfg_RescanIntervalMinutes: rescanIntervalMinutesField.text
     property alias formLayout: root
 
     // Proprietà per sezioni collassabili
@@ -151,12 +152,27 @@ Kirigami.FormLayout {
             i18n("Sequenziale"),
             i18n("Casuale (ogni volta)"),
             i18n("Mescola Una Volta"),
-            i18n("Casuale Intelligente (evita ripetizioni)")
+            i18n("Casuale Intelligente (evita ripetizioni)"),
+            i18n("No Repeat Shuffle (tutte una volta)")
         ]
         currentIndex: wallpaper.configuration.RandomOrder || 0
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
-        QtControls2.ToolTip.text: i18n("Come vengono ordinate le immagini:\n\n• Sequenziale: in ordine come appaiono in Nextcloud\n• Casuale: ordine completamente casuale ad ogni ciclo\n• Mescola Una Volta: mescola all'inizio, poi sequenziale\n• Casuale Intelligente: evita di mostrare immagini recenti, migliore varietà")
+        QtControls2.ToolTip.text: i18n("Come vengono ordinate le immagini:\n\n• Sequenziale: in ordine come appaiono in Nextcloud\n• Casuale: ordine completamente casuale ad ogni ciclo\n• Mescola Una Volta: mescola all'inizio, poi sequenziale\n• Casuale Intelligente: evita di mostrare immagini recenti, migliore varietà\n• No Repeat Shuffle: mostra tutte le immagini una volta prima di ripetere (scelta consigliata per librerie grandi)")
+    }
+
+    QtControls2.TextField {
+        id: rescanIntervalMinutesField
+        Kirigami.FormData.label: i18n("Aggiorna Lista (minuti):")
+        placeholderText: i18n("10")
+        visible: sectionSlideshowExpanded
+        validator: IntValidator {
+            bottom: 0
+            top: 1440
+        }
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Ogni quanto aggiornare la lista dalla cartella Nextcloud per seguire aggiunte/rimozioni/rinomine.\n\n• 0 = disabilitato\n• 5-15 = consigliato\n\nCartelle con molte sottocartelle possono richiedere più tempo per la scansione.")
     }
 
     Kirigami.Separator {

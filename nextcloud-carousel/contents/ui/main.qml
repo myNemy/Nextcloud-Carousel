@@ -183,6 +183,10 @@ WallpaperItem {
         property var photoList: []
         property var usedIndices: []  // Track recently used indices to avoid repeats
         property var recentIndices: []  // Track recent indices for better randomization
+        // No Repeat Shuffle: consume a shuffled bag of URLs, refill when empty.
+        // Store URLs (not indices) so the queue survives list reordering and refresh.
+        property var noRepeatQueueUrls: []
+        property string lastShownUrl: ""
         property int currentIndex: 0
         property bool initialized: false
         property int lastIndex: -1  // Track last shown index
@@ -286,7 +290,7 @@ WallpaperItem {
             retryDelay = Math.min(retryDelay * 2, 300)
         }
         
-        function loadPhotos() {
+        function loadPhotos(isRefresh) {
             console.log("Loading photos from Nextcloud:", root.configuration.NextcloudUrl)
             
             var baseUrl = root.configuration.NextcloudUrl
@@ -391,48 +395,8 @@ WallpaperItem {
                             console.warn("No images found! XML response preview:", xmlText.substring(0, 500))
                             console.warn("Paths extracted:", paths)
                         }
-                        photoList = images
-                        
-                        if (photoList.length > 0) {
-                            // Reset retry state on successful load
-                            retryCount = 0
-                            retryDelay = 30
-                            
-                            // Reset switch counter and clear cache when reloading photo list
-                            imageSwitchCount = 0
-                            clearDataUrlCache()
-                            
-                            // Update cache size based on number of photos
-                            updateCacheSize()
-                            
-                            // Handle different order modes
-                            var orderMode = root.configuration.RandomOrder || 0
-                            
-                            if (orderMode === 1 || orderMode === 2) {
-                                // Random or Shuffle once: shuffle the list
-                                for (var j = photoList.length - 1; j > 0; j--) {
-                                    var k = Math.floor(Math.random() * (j + 1))
-                                    var temp = photoList[j]
-                                    photoList[j] = photoList[k]
-                                    photoList[k] = temp
-                                }
-                                currentIndex = 0
-                            } else if (orderMode === 3) {
-                                // Smart random: start with random index
-                                currentIndex = Math.floor(Math.random() * photoList.length)
-                                usedIndices = [currentIndex]
-                                recentIndices = [currentIndex]
-                            } else {
-                                // Sequential: start from beginning
-                                currentIndex = 0
-                            }
-                            
-                            lastIndex = -1
-                            usedIndices = []
-                            recentIndices = []
-                            startCarousel()
-                            updateCurrentImage()
-                        } else {
+                        applyNewPhotoList(images, isRefresh === true)
+                        if (photoList.length === 0) {
                             console.warn("No images found in", photoPath)
                             root.loading = false
                         }
@@ -463,6 +427,156 @@ WallpaperItem {
             }
             
             xhr.send(propfindBody)
+        }
+
+        function shuffleCopy(inputArr) {
+            var arr = inputArr.slice(0)
+            for (var j = arr.length - 1; j > 0; j--) {
+                var k = Math.floor(Math.random() * (j + 1))
+                var temp = arr[j]
+                arr[j] = arr[k]
+                arr[k] = temp
+            }
+            return arr
+        }
+
+        function refillNoRepeatQueueIfNeeded() {
+            if (photoList.length === 0) {
+                noRepeatQueueUrls = []
+                return
+            }
+            if (noRepeatQueueUrls.length > 0) return
+
+            noRepeatQueueUrls = shuffleCopy(photoList)
+            // Avoid immediate repeat across cycles when possible
+            if (noRepeatQueueUrls.length > 1 && lastShownUrl && noRepeatQueueUrls[0] === lastShownUrl) {
+                var swapIdx = 1 + Math.floor(Math.random() * (noRepeatQueueUrls.length - 1))
+                var t = noRepeatQueueUrls[0]
+                noRepeatQueueUrls[0] = noRepeatQueueUrls[swapIdx]
+                noRepeatQueueUrls[swapIdx] = t
+            }
+        }
+
+        function setCurrentByUrl(url) {
+            if (!url) return false
+            var idx = photoList.indexOf(url)
+            if (idx < 0) return false
+            currentIndex = idx
+            lastShownUrl = url
+            return true
+        }
+
+        function applyNewPhotoList(newImages, isRefresh) {
+            if (!newImages) newImages = []
+
+            var oldList = photoList || []
+            var oldCurrentUrl = (oldList.length > 0 && currentIndex >= 0 && currentIndex < oldList.length) ? oldList[currentIndex] : ""
+            var orderMode = root.configuration.RandomOrder || 0
+
+            // If nothing changed, just clear loading flags.
+            if (oldList.length === newImages.length) {
+                var same = true
+                for (var s = 0; s < newImages.length; s++) {
+                    if (oldList[s] !== newImages[s]) { same = false; break }
+                }
+                if (same) {
+                    root.loading = false
+                    initialized = true
+                    return
+                }
+            }
+
+            photoList = newImages
+
+            if (photoList.length === 0) {
+                currentIndex = 0
+                noRepeatQueueUrls = []
+                lastShownUrl = ""
+                usedIndices = []
+                recentIndices = []
+                initialized = false
+                return
+            }
+
+            // Reset retry state on successful load
+            retryCount = 0
+            retryDelay = 30
+
+            // Always drop Data URL cache references on list update (memory safety)
+            clearDataUrlCache()
+            updateCacheSize()
+
+            if (isRefresh && orderMode === 4) {
+                // Remove missing URLs from the queue
+                var present = ({})
+                for (var p = 0; p < photoList.length; p++) present[photoList[p]] = true
+
+                var filtered = []
+                for (var q = 0; q < noRepeatQueueUrls.length; q++) {
+                    var u = noRepeatQueueUrls[q]
+                    if (present[u]) filtered.push(u)
+                }
+                noRepeatQueueUrls = filtered
+
+                // Add new URLs that are not already in queue and not currently shown
+                var inQueue = ({})
+                for (var iq = 0; iq < noRepeatQueueUrls.length; iq++) inQueue[noRepeatQueueUrls[iq]] = true
+
+                for (var a = 0; a < photoList.length; a++) {
+                    var nu = photoList[a]
+                    if (nu === lastShownUrl) continue
+                    if (!inQueue[nu]) {
+                        var pos = Math.floor(Math.random() * (noRepeatQueueUrls.length + 1))
+                        noRepeatQueueUrls.splice(pos, 0, nu)
+                        inQueue[nu] = true
+                    }
+                }
+
+                // Keep current image if still present; otherwise advance using the queue.
+                if (oldCurrentUrl && setCurrentByUrl(oldCurrentUrl)) {
+                    startCarousel()
+                    updateCurrentImage()
+                    return
+                }
+                refillNoRepeatQueueIfNeeded()
+                var nextUrl = noRepeatQueueUrls.shift()
+                if (!setCurrentByUrl(nextUrl)) {
+                    currentIndex = 0
+                    lastShownUrl = photoList[currentIndex]
+                }
+                startCarousel()
+                updateCurrentImage()
+                return
+            }
+
+            // Non-refresh or other modes: reset ordering mode on load.
+            imageSwitchCount = 0
+            lastIndex = -1
+            usedIndices = []
+            recentIndices = []
+            noRepeatQueueUrls = []
+            lastShownUrl = ""
+
+            if (orderMode === 1 || orderMode === 2) {
+                photoList = shuffleCopy(photoList)
+                currentIndex = 0
+            } else if (orderMode === 3) {
+                currentIndex = Math.floor(Math.random() * photoList.length)
+            } else if (orderMode === 4) {
+                refillNoRepeatQueueIfNeeded()
+                var firstUrl = noRepeatQueueUrls.shift()
+                if (!setCurrentByUrl(firstUrl)) {
+                    currentIndex = 0
+                    lastShownUrl = photoList[currentIndex]
+                }
+            } else {
+                currentIndex = 0
+                lastShownUrl = photoList[currentIndex]
+            }
+
+            lastIndex = -1
+            startCarousel()
+            updateCurrentImage()
         }
         
         function startCarousel() {
@@ -575,6 +689,25 @@ WallpaperItem {
                 recentIndices.push(currentIndex)
                 if (recentIndices.length > 10) {
                     recentIndices.shift()
+                }
+            } else if (orderMode === 4) {
+                // No Repeat Shuffle: consume queue of URLs; refill when empty.
+                refillNoRepeatQueueIfNeeded()
+                if (noRepeatQueueUrls.length > 0) {
+                    var nextUrl = noRepeatQueueUrls.shift()
+                    if (!setCurrentByUrl(nextUrl)) {
+                        // List changed; rebuild queue and fallback safely.
+                        noRepeatQueueUrls = []
+                        refillNoRepeatQueueIfNeeded()
+                        nextUrl = noRepeatQueueUrls.shift()
+                        if (!setCurrentByUrl(nextUrl)) {
+                            currentIndex = (currentIndex + 1) % photoList.length
+                            lastShownUrl = photoList[currentIndex]
+                        }
+                    }
+                } else {
+                    currentIndex = 0
+                    lastShownUrl = photoList[0]
                 }
             }
             
@@ -2717,6 +2850,16 @@ WallpaperItem {
         running: carouselController.initialized && carouselController.photoList.length > 0
         repeat: true
         onTriggered: carouselController.nextPhoto()
+    }
+
+    Timer {
+        id: photoListRefreshTimer
+        repeat: true
+        running: carouselController.initialized && (root.configuration.RescanIntervalMinutes || 0) > 0
+        interval: Math.max(1, (root.configuration.RescanIntervalMinutes || 0)) * 60 * 1000
+        onTriggered: {
+            carouselController.loadPhotos(true)
+        }
     }
     
     // Retry timer for PROPFIND with exponential backoff

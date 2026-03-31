@@ -27,7 +27,7 @@
       <default>10</default>
     </entry>
     <entry name="RandomOrder" type="int">
-      <label>Order mode: 0=Sequential, 1=Random, 2=Shuffle once, 3=Smart random (avoid repeats)</label>
+      <label>Order mode: 0=Sequential, 1=Random, 2=Shuffle once, 3=Smart random (avoid repeats), 4=No Repeat Shuffle</label>
       <default>0</default>
     </entry>
     <entry name="Blur" type="bool">
@@ -101,11 +101,18 @@
       <default></default>
     </entry>
     <entry name="MaxImageSizeMB" type="int">
-      <label>Maximum image size limit in MB (0 = auto-detect, 3-30 recommended)</label>
+      <label>Maximum image size limit in MB (0 = no limit)</label>
       <default>0</default>
       <min>0</min>
       <max>50</max>
-      <whatsthis>Maximum size for images to be loaded. Images larger than this will be skipped to prevent memory issues. Set to 0 for automatic detection (default: 5MB). Recommended values: 3MB for low-end systems, 5-10MB for mid-range, 10-15MB for high-end systems (16GB+ RAM).</whatsthis>
+      <whatsthis>Maximum size for images to be loaded. Images larger than this will be skipped to prevent memory issues. Set to 0 for no limit. Recommended values: 3MB for low-end systems, 5-10MB for mid-range, 10-15MB for high-end systems (16GB+ RAM).</whatsthis>
+    </entry>
+    <entry name="RescanIntervalMinutes" type="int">
+      <label>Photo list refresh interval (minutes, 0 = disabled)</label>
+      <default>10</default>
+      <min>0</min>
+      <max>1440</max>
+      <whatsthis>How often to refresh the Nextcloud folder listing to pick up additions/removals/renames. Use 0 to disable automatic refresh. Large folder trees may take longer to scan.</whatsthis>
     </entry>
     <entry name="ShowMethodIndicator" type="bool">
       <label>Show processing method indicator (QML/C++)</label>
