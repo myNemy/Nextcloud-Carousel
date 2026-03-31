@@ -3221,6 +3221,42 @@ WallpaperItem {
                 }
             }
         }
+
+        // List / Shuffle stats overlay (total + progress)
+        Rectangle {
+            id: shuffleStatsIndicator
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 10
+            anchors.topMargin: 10 + (methodIndicator.visible ? (methodIndicator.height + 6) : 0)
+            width: shuffleStatsText.implicitWidth + 20
+            height: shuffleStatsText.implicitHeight + 10
+            radius: 5
+            color: Qt.rgba(0, 0, 0, 0.70)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.25)
+            visible: root.configuration.ShowShuffleStats && carouselController.photoList.length > 0
+
+            Text {
+                id: shuffleStatsText
+                anchors.centerIn: parent
+                font.pixelSize: 13
+                color: "white"
+                text: {
+                    var total = carouselController.photoList.length
+                    var mode = root.configuration.RandomOrder || 0
+                    if (mode === 4) {
+                        // No Repeat Shuffle cycle stats:
+                        // queue = remaining (excluding current); shown = total - remaining
+                        var remaining = carouselController.noRepeatQueueUrls.length
+                        var shown = Math.max(0, total - remaining)
+                        return i18n("Lista: %1 • Ciclo: %2/%3", total, shown, total)
+                    }
+                    var pos = Math.max(0, carouselController.currentIndex + 1)
+                    return i18n("Lista: %1 • %2/%3", total, pos, total)
+                }
+            }
+        }
         
         // Location OSD (Permanent overlay with script font)
         Text {

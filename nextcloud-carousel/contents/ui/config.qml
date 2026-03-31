@@ -35,6 +35,7 @@ Kirigami.FormLayout {
     property alias cfg_MaxImageSizeMB: maxImageSizeMBField.text
     property alias cfg_ShowMethodIndicator: showMethodIndicatorCheckBox.checked
     property alias cfg_MethodIndicatorDuration: methodIndicatorDurationField.text
+    property alias cfg_ShowShuffleStats: showShuffleStatsCheckBox.checked
     property alias cfg_QmlDataUrlFallback: qmlDataUrlFallbackCheckBox.checked
     property alias cfg_RescanIntervalMinutes: rescanIntervalMinutesField.text
     property alias formLayout: root
@@ -465,6 +466,16 @@ Kirigami.FormLayout {
         QtControls2.ToolTip.delay: 1000
         QtControls2.ToolTip.visible: hovered
         QtControls2.ToolTip.text: i18n("Quanto tempo mostrare l'indicatore del metodo dopo il caricamento di un'immagine\n\nRange: 0-30 secondi\n• 0 = sempre visibile (non scompare mai)\n• 1-30 = scompare automaticamente dopo N secondi\n\nConsigliato: 3-5 secondi per vedere rapidamente il metodo usato")
+    }
+
+    QtControls2.CheckBox {
+        id: showShuffleStatsCheckBox
+        Kirigami.FormData.label: i18n("Statistiche Lista:")
+        text: i18n("Mostra totale e progresso (viste/rimanenti)")
+        visible: sectionOverlayExpanded
+        QtControls2.ToolTip.delay: 1000
+        QtControls2.ToolTip.visible: hovered
+        QtControls2.ToolTip.text: i18n("Mostra un piccolo overlay con:\n\n• Totale immagini trovate\n• Quante viste / quante restano\n\nIn modalità No Repeat Shuffle mostra l'avanzamento del ciclo (tutte una volta).")
     }
 
     QtControls2.CheckBox {

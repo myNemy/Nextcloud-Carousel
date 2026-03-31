@@ -119,6 +119,11 @@
       <default>false</default>
       <whatsthis>Shows a small badge in the top-right corner indicating whether the current image is processed using QML (Data URLs) or C++ (file temporanei). Green badge = C++ (optimized), Blue badge = QML (standard).</whatsthis>
     </entry>
+    <entry name="ShowShuffleStats" type="bool">
+      <label>Show shuffle/list progress indicator</label>
+      <default>false</default>
+      <whatsthis>Shows a small overlay with the total number of images and how many have been shown/are remaining. For No Repeat Shuffle, it shows cycle progress (shown vs remaining).</whatsthis>
+    </entry>
     <entry name="MethodIndicatorDuration" type="int">
       <label>Method indicator display duration (seconds, 0 = always visible)</label>
       <default>3</default>
