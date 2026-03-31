@@ -48,8 +48,9 @@ Two wallpaper plugins for KDE Plasma 6 that display media from your Nextcloud se
 ```
 
 The script will:
-- Copy image plugin to `~/.local/share/plasma/wallpapers/org.nextcloud.carousel/`
-- Copy video plugin to `~/.local/share/plasma/wallpapers/org.nextcloud.video/`
+- Install the wallpaper plugins either:
+  - **system-wide** under `/usr/share/plasma/wallpapers/` (if run with sudo / system install), or
+  - **user-local** under `~/.local/share/plasma/wallpapers/`
 - Display instructions for configuration
 
 ### Manual Install
@@ -57,6 +58,8 @@ The script will:
 ```bash
 mkdir -p ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
 cp -r nextcloud-carousel/* ~/.local/share/plasma/wallpapers/org.nextcloud.carousel/
+mkdir -p ~/.local/share/plasma/wallpapers/org.nextcloud.video
+cp -r nextcloud-video/* ~/.local/share/plasma/wallpapers/org.nextcloud.video/
 ```
 
 ### After Installation
@@ -71,7 +74,7 @@ killall plasmashell && kstart plasmashell
 
 ### C++ downloader without root (`~/.local`)
 
-If the installer builds the optional C++ downloader, it installs to `~/.local/lib/qt6/qml/org/nextcloud/carousel/` **and copies the same files into the wallpaper tree** at `~/.local/share/plasma/wallpapers/org.nextcloud.carousel/contents/ui/org/nextcloud/carousel/`. Plasmashell loads `main.qml` from `contents/ui/`, and the QML engine adds that folder to the import path, so **`import org.nextcloud.carousel` resolves without** setting `QML_IMPORT_PATH`.
+If the installer is able to build the C++ downloader (recommended/default when available), it installs to `~/.local/lib/qt6/qml/org/nextcloud/carousel/` **and copies the same files into the wallpaper tree** at `~/.local/share/plasma/wallpapers/org.nextcloud.carousel/contents/ui/org/nextcloud/carousel/`. Plasmashell loads `main.qml` from `contents/ui/`, and the QML engine adds that folder to the import path, so **`import org.nextcloud.carousel` resolves without** setting `QML_IMPORT_PATH`.
 
 The installer still adds `~/.config/plasma-workspace/env/nextcloud-carousel-qml.sh` so other Qt tools can find the module under `~/.local/lib/qt6/qml/`; a full session restart may be needed for that. A system install under `/usr` uses the same nested path under `/usr/share/plasma/wallpapers/.../contents/ui/org/nextcloud/carousel/`.
 
@@ -191,13 +194,12 @@ The plugin automatically reads EXIF orientation data from JPEG images and rotate
 
 This script will:
 - Verify plugin structure and files
-- Fix permissions if needed
-- Restart plasmashell automatically
+- Optionally restart plasmashell (use `--restart`)
 
 **Manual steps:**
-1. Verify installation: `ls ~/.local/share/plasma/wallpapers/org.nextcloud.carousel/`
-2. Check permissions: `chmod -R 755 ~/.local/share/plasma/wallpapers/org.nextcloud.carousel/`
-3. Restart plasmashell: `killall plasmashell && kstart plasmashell`
+1. Verify installation (user): `ls ~/.local/share/plasma/wallpapers/org.nextcloud.carousel/`
+2. Verify installation (system): `ls /usr/share/plasma/wallpapers/org.nextcloud.carousel/`
+3. Restart your Plasma session (recommended): log out and log back in
 
 ### "Configure" Button Doesn't Appear
 
@@ -235,7 +237,6 @@ If you need to reinstall:
 ```bash
 rm -rf ~/.local/share/plasma/wallpapers/org.nextcloud.carousel
 ./install.sh
-killall plasmashell && kstart plasmashell
 ```
 
 ## Uninstallation
