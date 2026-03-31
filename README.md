@@ -16,7 +16,7 @@ Two wallpaper plugins for KDE Plasma 6 that display media from your Nextcloud se
 - ✅ **Multiple image formats**: JPEG, PNG, WebP, GIF, BMP, SVG, TIFF
 - ✅ **Configurable display settings**: Fill mode, scale, blur, background color
 - ✅ **Loading indicator**: Show/hide option
-- ✅ **Optional C++ downloader** (file-based pipeline)
+- ✅ **C++ downloader (recommended/default when available)**: file-based pipeline (lower memory, more robust)
 
 ### Nextcloud Video (Video Plugin)
 - ✅ **Video wallpaper** from Nextcloud
@@ -69,7 +69,7 @@ cp -r nextcloud-carousel/* ~/.local/share/plasma/wallpapers/org.nextcloud.carous
 killall plasmashell && kstart plasmashell
 ```
 
-### C++ optimization without root (`~/.local`)
+### C++ downloader without root (`~/.local`)
 
 If the installer builds the optional C++ downloader, it installs to `~/.local/lib/qt6/qml/org/nextcloud/carousel/` **and copies the same files into the wallpaper tree** at `~/.local/share/plasma/wallpapers/org.nextcloud.carousel/contents/ui/org/nextcloud/carousel/`. Plasmashell loads `main.qml` from `contents/ui/`, and the QML engine adds that folder to the import path, so **`import org.nextcloud.carousel` resolves without** setting `QML_IMPORT_PATH`.
 
@@ -120,7 +120,7 @@ The installer still adds `~/.config/plasma-workspace/env/nextcloud-carousel-qml.
 
 - **Refresh list (minutes)**: Optional periodic rescan to follow folder changes (add/remove/rename)
 - **Max image size (MB)**: `0 = no limit`, otherwise images larger than the limit may be skipped
-- **QML Data URL fallback**: Optional (disable to force file-based C++ pipeline)
+- **QML Data URL fallback**: Optional *fallback* path (disable to force the C++ file-based pipeline)
 - **Shuffle stats overlay**: Optional small overlay showing list size and progress
 
 #### Display Settings
